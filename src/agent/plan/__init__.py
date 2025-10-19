@@ -8,16 +8,23 @@ from src.inference import BaseInference
 from src.agent.meta import MetaAgent
 from src.router import LLMRouter
 from src.agent import BaseAgent
+from src.api_client import APIClient
 from termcolor import colored
+from datetime import datetime
+import time
 
 class PlanAgent(BaseAgent):
-    def __init__(self,max_iteration=10,llm:BaseInference=None,verbose=False):
+    def __init__(self,max_iteration=10,llm:BaseInference=None,verbose=False,api_enabled=True):
         self.name='Plan Agent'
         self.max_iteration=max_iteration
         self.graph=self.create_graph()
         self.verbose=verbose
         self.iteration=0
         self.llm=llm
+        self.api_enabled=api_enabled
+        self.api_client=APIClient() if api_enabled else None
+        self.start_time=None
+        self.current_input=None
     
     def router(self,state:PlanState):
         routes=[
@@ -42,6 +49,21 @@ class PlanAgent(BaseAgent):
         plan=plan_data.get('Plan')
         if self.verbose:
             print(colored(f'Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])}',color='green',attrs=['bold']))
+        
+        # Gửi plan lên API
+        if self.api_enabled and self.api_client:
+            api_data = {
+                "input": state.get('input'),
+                "plan_type": "simple",
+                "current_plan": plan,
+                "pending_tasks": plan.copy(),
+                "completed_tasks": [],
+                "current_task": plan[0] if plan else "",
+                "status": "plan_created",
+                "timestamp": datetime.now().isoformat()
+            }
+            self.api_client.send_plan_status(api_data)
+        
         return {**state,'plan':plan}
     
     def advance_plan(self,state:PlanState):
@@ -63,6 +85,21 @@ class PlanAgent(BaseAgent):
         plan=plan_data.get('Plan')
         if self.verbose:
             print(colored(f'Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])}',color='green',attrs=['bold']))
+        
+        # Gửi plan lên API
+        if self.api_enabled and self.api_client:
+            api_data = {
+                "input": state.get('input'),
+                "plan_type": "advanced",
+                "current_plan": plan,
+                "pending_tasks": plan.copy(),
+                "completed_tasks": [],
+                "current_task": plan[0] if plan else "",
+                "status": "plan_created",
+                "timestamp": datetime.now().isoformat()
+            }
+            self.api_client.send_plan_status(api_data)
+        
         return {**state,'plan':plan}
 
 
@@ -74,6 +111,21 @@ class PlanAgent(BaseAgent):
         if self.verbose:
             print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
             print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+        
+        # Gửi trạng thái initialization lên API
+        if self.api_enabled and self.api_client:
+            api_data = {
+                "input": self.current_input or "",
+                "plan_type": "execution",
+                "current_plan": state.get('plan'),
+                "pending_tasks": pending,
+                "completed_tasks": completed,
+                "current_task": current,
+                "status": "execution_started",
+                "timestamp": datetime.now().isoformat()
+            }
+            self.api_client.send_plan_status(api_data)
+        
         messages=[SystemMessage(system_prompt)]
         return {**state,'messages':messages,'current':current,'pending':pending,'completed':completed,'output':''}
     
@@ -86,6 +138,17 @@ class PlanAgent(BaseAgent):
         if self.verbose:
             print(colored(f'Current Task:\n{current}',color='cyan',attrs=['bold']))
             print(colored(f'Task Response:\n{task_response}',color='cyan',attrs=['bold']))
+        
+        # Gửi task update lên API
+        if self.api_enabled and self.api_client:
+            task_data = {
+                "task_name": current,
+                "task_response": task_response,
+                "status": "task_completed",
+                "timestamp": datetime.now().isoformat()
+            }
+            self.api_client.send_task_update(task_data)
+        
         user_prompt=f'Plan:\n{plan}\nTask:\n{current}\nTask Response:\n{task_response}'
         messages=[HumanMessage(user_prompt)]
         return {**state,'messages':messages,'responses':[task_response]}
@@ -104,6 +167,21 @@ class PlanAgent(BaseAgent):
         else:
             current=''
         completed=plan_data.get('Completed')
+        
+        # Gửi plan update lên API
+        if self.api_enabled and self.api_client:
+            api_data = {
+                "input": self.current_input or "",
+                "plan_type": "execution",
+                "current_plan": plan,
+                "pending_tasks": pending,
+                "completed_tasks": completed,
+                "current_task": current,
+                "status": "plan_updated",
+                "timestamp": datetime.now().isoformat()
+            }
+            self.api_client.send_plan_status(api_data)
+        
         return {**state,'plan':plan,'current':current,'pending':pending,'completed':completed}
     
     def final(self,state:UpdateState):
@@ -111,6 +189,19 @@ class PlanAgent(BaseAgent):
         llm_response=self.llm.invoke(state.get('messages')+[HumanMessage(user_prompt)])
         plan_data=extract_llm_response(llm_response.content)
         output=plan_data.get('Final Answer')
+        
+        # Gửi kết quả final lên API
+        if self.api_enabled and self.api_client:
+            execution_time = time.time() - self.start_time if self.start_time else 0
+            result_data = {
+                "input": self.current_input or "",
+                "final_answer": output,
+                "completed_tasks": state.get('completed', []),
+                "execution_time": execution_time,
+                "timestamp": datetime.now().isoformat()
+            }
+            self.api_client.send_final_result(result_data)
+        
         return {**state,'output':output}
 
     def plan_controller(self,state:UpdateState):
@@ -153,6 +244,10 @@ class PlanAgent(BaseAgent):
         return graph.compile(debug=False)
 
     def invoke(self,input:str):
+        # Lưu thời gian bắt đầu và input để sử dụng cho API
+        self.start_time = time.time()
+        self.current_input = input
+        
         if self.verbose:
             print(f'Entering '+colored(self.name,'black','on_white'))
         state={
