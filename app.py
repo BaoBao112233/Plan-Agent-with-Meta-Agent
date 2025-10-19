@@ -7,8 +7,11 @@ from experimental import *
 
 load_dotenv()
 
-api_key=environ.get('GROQ_API_KEY')
-llm=ChatGroq('llama-3.1-70b-versatile',api_key,temperature=0)
+api_key = environ.get("GROQ_API_KEY")
+if not api_key:
+    raise ValueError("GROQ_API_KEY environment variable is not set. Please add it to your .env file.")
+
+llm=ChatGroq('llama-3.3-70b-versatile',api_key,temperature=0)
 # agent=MetaAgent(llm=llm,tools=[web_search_tool,file_writer_tool],verbose=True)
 agent=PlanAgent(llm=llm,verbose=True)
 input=input("Enter a query: ")

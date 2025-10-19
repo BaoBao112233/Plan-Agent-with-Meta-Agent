@@ -2,3 +2,5 @@ langgraph
 colorama
 termcolor
 requests
+ipython
+python-dotenv
