@@ -53,3 +53,51 @@ def current_time_tool(timezone:str) -> str:
     except Exception as err:
         return f"Error: {err}"
 
+class TimeChecker(BaseModel):
+    timezone:str = Field(..., description="The timezone to get the current time from.", example=['UTC', 'US/Pacific'])
+
+@tool("Time Checker Tool", args_schema=TimeChecker)
+def time_checker_tool(timezone:str) -> str:
+    '''
+    Returns the current time in the specified timezone.
+    '''
+    from datetime import datetime
+    import pytz
+    try:
+        current_time = datetime.now(pytz.timezone(timezone))
+        return current_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
+    except Exception as err:
+        return f"Error: {err}"
+
+class Location(BaseModel):
+    ip_address:str=Field(...,description="The IP address to be used for identifying the time zone.",example=['192.168.1.1'])
+
+@tool("Time Zone Identifier Tool",args_schema=Location)
+def time_zone_identifier_tool(ip_address:str):
+    '''
+    Identifies the time zone of a given IP address using the ip-api.
+    '''
+    import requests
+    try:
+        response = requests.get(f'http://ip-api.com/json/{ip_address}')
+        data = response.json()
+        return data['timezone']
+    except Exception as err:
+        return f"Error: {err}"
+
+class TimeChecker(BaseModel):
+    timezone:str = Field(..., description="The timezone to get the current time from.", example=['UTC', 'US/Pacific'])
+
+@tool("Time Checker Tool", args_schema=TimeChecker)
+def time_checker_tool(timezone:str) -> str:
+    '''
+    Returns the current time in the specified timezone.
+    '''
+    from datetime import datetime
+    import pytz
+    try:
+        current_time = datetime.now(pytz.timezone(timezone))
+        return current_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
+    except Exception as err:
+        return f"Error: {err}"
+
