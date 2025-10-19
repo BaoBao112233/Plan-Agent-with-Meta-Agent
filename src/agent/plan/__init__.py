@@ -108,23 +108,18 @@ class PlanAgent(BaseAgent):
         current=state.get('plan')[0]
         pending=state.get('plan')
         completed=[]
+        
         if self.verbose:
             print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
             print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
         
-        # Gửi trạng thái initialization lên API
+        # Khởi tạo tất cả tasks với status "pending" trên API
         if self.api_enabled and self.api_client:
-            api_data = {
-                "input": self.current_input or "",
-                "plan_type": "execution",
-                "current_plan": state.get('plan'),
-                "pending_tasks": pending,
-                "completed_tasks": completed,
-                "current_task": current,
-                "status": "execution_started",
-                "timestamp": datetime.now().isoformat()
-            }
-            self.api_client.send_plan_status(api_data)
+            for task in pending:
+                self.api_client.update_task_status(task, "pending")
+            
+            # Update plan status to "in_progress" 
+            self.api_client.update_plan_status("in_progress")
         
         messages=[SystemMessage(system_prompt)]
         return {**state,'messages':messages,'current':current,'pending':pending,'completed':completed,'output':''}
@@ -133,21 +128,21 @@ class PlanAgent(BaseAgent):
         plan=state.get('plan')
         current=state.get('current')
         responses=state.get('responses')
+        
+        # Update task status to "in_progress" trước khi execute
+        if self.api_enabled and self.api_client:
+            self.api_client.update_task_status(current, "in_progress")
+        
         agent=MetaAgent(llm=self.llm,verbose=self.verbose)
         task_response=agent.invoke(f'Information:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(responses)])}\nTask:\n{current}')
+        
         if self.verbose:
             print(colored(f'Current Task:\n{current}',color='cyan',attrs=['bold']))
             print(colored(f'Task Response:\n{task_response}',color='cyan',attrs=['bold']))
         
-        # Gửi task update lên API
+        # Update task với execution result
         if self.api_enabled and self.api_client:
-            task_data = {
-                "task_name": current,
-                "task_response": task_response,
-                "status": "task_completed",
-                "timestamp": datetime.now().isoformat()
-            }
-            self.api_client.send_task_update(task_data)
+            self.api_client.update_task_status(current, "completed", task_response)
         
         user_prompt=f'Plan:\n{plan}\nTask:\n{current}\nTask Response:\n{task_response}'
         messages=[HumanMessage(user_prompt)]
@@ -159,29 +154,38 @@ class PlanAgent(BaseAgent):
         plan=plan_data.get('Plan')
         pending=plan_data.get('Pending')
         completed=plan_data.get('Completed')
+        
         if self.verbose:
             print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
             print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+        
+        # Update task statuses trên API
+        if self.api_enabled and self.api_client:
+            # Lấy task trước đó để so sánh
+            previous_completed = state.get('completed', [])
+            previous_pending = state.get('pending', [])
+            
+            # Tìm tasks vừa được completed
+            newly_completed = [task for task in completed if task not in previous_completed]
+            for task in newly_completed:
+                self.api_client.update_task_status(task, "completed", f"Task '{task}' hoàn thành thành công")
+            
+            # Update pending tasks status
+            for task in pending:
+                if task not in previous_pending:  # New pending task
+                    self.api_client.update_task_status(task, "pending")
+            
+            # Update plan status
+            if not pending:  # Tất cả tasks đã completed
+                self.api_client.update_plan_status("completed")
+            else:
+                self.api_client.update_plan_status("in_progress")
+        
         if pending:
             current=pending[0]
         else:
             current=''
         completed=plan_data.get('Completed')
-        
-        # Gửi plan update lên API
-        if self.api_enabled and self.api_client:
-            api_data = {
-                "input": self.current_input or "",
-                "plan_type": "execution",
-                "current_plan": plan,
-                "pending_tasks": pending,
-                "completed_tasks": completed,
-                "current_task": current,
-                "status": "plan_updated",
-                "timestamp": datetime.now().isoformat()
-            }
-            self.api_client.send_plan_status(api_data)
-        
         return {**state,'plan':plan,'current':current,'pending':pending,'completed':completed}
     
     def final(self,state:UpdateState):
@@ -190,17 +194,12 @@ class PlanAgent(BaseAgent):
         plan_data=extract_llm_response(llm_response.content)
         output=plan_data.get('Final Answer')
         
-        # Gửi kết quả final lên API
+        # Hoàn thành plan trên API
         if self.api_enabled and self.api_client:
-            execution_time = time.time() - self.start_time if self.start_time else 0
-            result_data = {
-                "input": self.current_input or "",
-                "final_answer": output,
-                "completed_tasks": state.get('completed', []),
-                "execution_time": execution_time,
-                "timestamp": datetime.now().isoformat()
-            }
-            self.api_client.send_final_result(result_data)
+            self.api_client.update_plan_status("completed", output)
+            
+            if self.verbose:
+                print("🎉 Plan execution completed! All data sent to API.")
         
         return {**state,'output':output}
 

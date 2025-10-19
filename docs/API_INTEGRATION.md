@@ -2,7 +2,7 @@
 
 ## Tổng quan
 
-Plan Agent đã được tích hợp với khả năng gửi thông tin plan status và task updates lên API server thông qua các endpoint REST API.
+Plan Agent đã được tích hợp với Planner API để tự động tạo và cập nhật plans, tasks thông qua REST API endpoints.
 
 ## Cấu hình
 
@@ -17,45 +17,53 @@ API_BASE_URL=http://localhost:8000
 
 ### 2. API Server Requirements
 
-API server cần có các endpoints sau:
+API server cần có các endpoints sau (theo Planner API format):
 
-#### POST /plan/status
-Nhận thông tin trạng thái plan:
+#### POST /api/v1/plans
+Tạo plans mới với tasks:
+```json
+[
+  {
+    "session_id": 1,
+    "title": "Plan Agent - Simple",
+    "goal_text": "user query",
+    "trigger": "SYSTEM",
+    "priority": 1,
+    "tasks": [
+      {
+        "order_no": 1,
+        "title": "Task title",
+        "description": "Task description",
+        "max_retries": 2
+      }
+    ]
+  }
+]
+```
+
+#### PUT /api/v1/plans/{plan_id}
+Cập nhật plan status:
 ```json
 {
-  "input": "user query",
-  "plan_type": "simple|advanced|execution",
-  "current_plan": ["task1", "task2", "task3"],
-  "pending_tasks": ["task2", "task3"],
-  "completed_tasks": ["task1"],
-  "current_task": "task2",
-  "status": "plan_created|execution_started|plan_updated",
-  "timestamp": "2025-10-19T10:30:00"
+  "status": "created|in_progress|completed|failed",
+  "goal_text": "Updated goal"
 }
 ```
 
-#### POST /task/update
-Nhận thông tin cập nhật task:
+#### PUT /api/v1/tasks/{task_id}
+Cập nhật task status:
 ```json
 {
-  "task_name": "task description",
-  "task_response": "response from task execution",
-  "status": "task_completed",
-  "timestamp": "2025-10-19T10:30:00"
+  "status": "pending|in_progress|completed|failed",
+  "execution_result": "Task execution result"
 }
 ```
 
-#### POST /plan/result
-Nhận kết quả cuối cùng:
-```json
-{
-  "input": "user query",
-  "final_answer": "final response",
-  "completed_tasks": ["task1", "task2", "task3"],
-  "execution_time": 45.6,
-  "timestamp": "2025-10-19T10:30:00"
-}
-```
+#### GET /api/v1/plans
+Lấy tất cả plans
+
+#### GET /api/v1/plans/{plan_id}
+Lấy thông tin plan cụ thể
 
 ## Sử dụng
 
@@ -80,84 +88,77 @@ response = agent.invoke("Your query here")
 
 ## API Events Flow
 
-1. **Plan Creation**: Khi plan được tạo (simple/advanced)
-2. **Execution Start**: Khi bắt đầu thực hiện plan
-3. **Task Updates**: Mỗi khi hoàn thành một task
-4. **Plan Updates**: Khi cập nhật trạng thái pending/completed tasks
-5. **Final Result**: Khi hoàn thành toàn bộ plan
+1. **Plan Creation**: Tạo plan với tất cả tasks khi plan được tạo
+2. **Execution Start**: Cập nhật plan status thành "in_progress"
+3. **Task Execution**: 
+   - Update task status thành "in_progress" khi bắt đầu
+   - Update task status thành "completed" với execution result khi hoàn thành
+4. **Plan Updates**: Theo dõi và cập nhật trạng thái pending/completed tasks
+5. **Final Result**: Cập nhật plan status thành "completed" với final answer
+
+## APIClient Methods
+
+### Core Methods
+- `create_plan(plan_data)`: Tạo plan mới với tasks
+- `update_plan_status(status, goal_text)`: Cập nhật status của plan
+- `update_task_status(task_title, status, execution_result)`: Cập nhật status của task
+- `get_plan(plan_id)`: Lấy thông tin plan
+- `get_all_plans()`: Lấy tất cả plans
+
+### Backward Compatibility Methods
+- `send_plan_status(plan_data)`: Compatibility wrapper
+- `send_task_update(task_data)`: Compatibility wrapper  
+- `send_final_result(result_data)`: Compatibility wrapper
+
+## Testing
+
+Chạy test script để kiểm tra API integration:
+
+```bash
+python test_api_integration.py
+```
 
 ## Troubleshooting
 
 ### API Connection Issues
+
 - Kiểm tra API server có đang chạy tại `http://localhost:8000`
 - Kiểm tra endpoints có sẵn trong API server
 - Kiểm tra network connectivity
 
 ### Debugging API Calls
-API client sẽ in ra lỗi nếu không kết nối được với server, nhưng sẽ không dừng việc thực thi của Plan Agent.
+
+API client sẽ in ra status messages với emoji indicators:
+- ✅ Success operations
+- ❌ Error operations  
+- 🎉 Plan completion
 
 ### Tắt API Integration
+
 Nếu không muốn sử dụng API integration:
 ```python
 agent = PlanAgent(llm=llm, verbose=True, api_enabled=False)
 ```
 
-## Example API Server
-
-Bạn có thể tạo một simple API server bằng FastAPI:
+## Example Usage
 
 ```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
+from src.agent.plan import PlanAgent
+from src.inference.groq import ChatGroq
+from dotenv import load_dotenv
+from os import environ
 
-app = FastAPI()
+load_dotenv()
 
-class PlanStatus(BaseModel):
-    input: str
-    plan_type: str
-    current_plan: List[str]
-    pending_tasks: List[str]
-    completed_tasks: List[str]
-    current_task: str
-    status: str
-    timestamp: str
+# Setup
+api_key = environ.get("GROQ_API_KEY")
+llm = ChatGroq('llama-3.3-70b-versatile', api_key, temperature=0)
 
-class TaskUpdate(BaseModel):
-    task_name: str
-    task_response: str
-    status: str
-    timestamp: str
+# Create agent with API enabled
+agent = PlanAgent(llm=llm, verbose=True, api_enabled=True)
 
-class PlanResult(BaseModel):
-    input: str
-    final_answer: str
-    completed_tasks: List[str]
-    execution_time: float
-    timestamp: str
+# Execute query - will automatically create plan and update statuses via API
+response = agent.invoke("Create a plan to organize my workspace")
 
-@app.post("/plan/status")
-async def update_plan_status(status: PlanStatus):
-    print(f"Plan Status: {status}")
-    return {"message": "Plan status updated"}
-
-@app.post("/task/update")
-async def update_task(task: TaskUpdate):
-    print(f"Task Update: {task}")
-    return {"message": "Task updated"}
-
-@app.post("/plan/result")
-async def final_result(result: PlanResult):
-    print(f"Final Result: {result}")
-    return {"message": "Final result received"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-```
-
-Chạy server:
-```bash
-pip install fastapi uvicorn
-uvicorn main:app --reload
+print(f"Final Response: {response}")
 ```
