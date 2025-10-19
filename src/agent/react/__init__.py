@@ -7,7 +7,7 @@ from importlib import reload,import_module
 from IPython.display import display,Image
 from src.inference import BaseInference
 from langgraph.graph import StateGraph
-from src.agent.tool import ToolAgent
+from src.agent.tool import MCPToolAgent
 from src.agent import BaseAgent
 from termcolor import colored
 from platform import system
@@ -107,7 +107,7 @@ class ReactAgent(BaseAgent):
         message=(state['messages'][-1])
         response=extract_llm_response(message.content)
         query=response.get('Query')
-        generator=ToolAgent(location=self.dynamic_tools_file,llm=self.llm,verbose=self.verbose,json=True)
+        generator=MCPToolAgent(llm=self.llm,verbose=self.verbose)
         tool_info=generator.invoke(query)
         tool_name=tool_info.get('tool_name')
         func_name=tool_info.get('func_name')

@@ -1,3 +1,4 @@
+from src.agent.tool.mcp_agent import MCPToolAgent
 from src.agent.tool.utils import (extract_tools_from_module,
 update_tool_to_module,save_tool_to_module,remove_tool_from_module,
 read_markdown_file)
@@ -15,7 +16,11 @@ from subprocess import run
 import ast
 import os
 
-class ToolAgent(BaseAgent):
+# Export the new MCP-based Tool Agent as the default
+ToolAgent = MCPToolAgent
+
+# Keep the original ToolAgent as LegacyToolAgent for backward compatibility
+class LegacyToolAgent(BaseAgent):
     def __init__(self,location:str='',llm:BaseInference=None,verbose=False,json=False):
         self.name='Tool Agent'
         self.location=location

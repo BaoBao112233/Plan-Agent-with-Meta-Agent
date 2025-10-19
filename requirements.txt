@@ -1,6 +1,8 @@
 langgraph
+langchain-core
 colorama
 termcolor
 requests
 ipython
 python-dotenv
+pydantic
