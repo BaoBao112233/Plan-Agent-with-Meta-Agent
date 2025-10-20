@@ -1,6 +1,6 @@
 from src.agent.meta import MetaAgent
 from src.agent.plan import PlanAgent
-from src.agent.tool import ToolAgent  # Now imports MCPToolAgent
+from src.agent.tool import ToolAgent, MCPToolAgent # Now imports MCPToolAgent
 from src.mcp_tools_wrapper import get_mcp_tools_for_meta_agent
 from src.inference.groq import ChatGroq
 from os import environ
@@ -14,14 +14,14 @@ def test_mcp_tool_agent():
     print("🔧 Testing MCP Tool Agent")
     print("=" * 50)
     
-    api_key = environ.get("GROQ_API_KEY")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY environment variable is not set. Please add it to your .env file.")
+    # api_key = environ.get("GROQ_API_KEY")
+    # if not api_key:
+    #     raise ValueError("GROQ_API_KEY environment variable is not set. Please add it to your .env file.")
     
-    llm = ChatGroq('llama-3.3-70b-versatile', api_key, temperature=0)
+    llm = ChatGroq('llama-3.3-70b-versatile', temperature=0)
     
     # Initialize MCP Tool Agent
-    tool_agent = ToolAgent(llm=llm, verbose=True)
+    tool_agent = MCPToolAgent(llm=llm, verbose=True)
     
     print("\n🔍 Available commands:")
     print("1. 'list tools' - Show all available MCP tools")
@@ -88,11 +88,11 @@ def test_plan_agent():
     print("\n🤖 Testing Plan Agent with MCP integration")
     print("=" * 50)
     
-    api_key = environ.get("GROQ_API_KEY")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY environment variable is not set. Please add it to your .env file.")
+    # api_key = environ.get("GROQ_API_KEY")
+    # if not api_key:
+    #     raise ValueError("GROQ_API_KEY environment variable is not set. Please add it to your .env file.")
     
-    llm = ChatGroq('llama-3.3-70b-versatile', api_key, temperature=0)
+    llm = ChatGroq('llama-3.3-70b-versatile', temperature=0)
     
     # Initialize Plan Agent with API enabled
     plan_agent = PlanAgent(llm=llm, verbose=True, api_enabled=True)

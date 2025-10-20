@@ -105,63 +105,120 @@ class MCPClient:
             return None
         
         try:
-            # Vì MCP server có issue với messages endpoint, 
-            # ta sẽ tạo mock response cho demo
-            print(f"🧪 Mock executing tool '{tool_name}' with parameters: {parameters}")
+            # First try to call real MCP server
+            result = self._call_real_mcp_tool(tool_name, parameters)
+            if result:
+                return result
             
-            # Mock responses cho từng tool
-            mock_responses = {
-                "get_device_list": {
-                    "rooms": [
-                        {"id": "room1", "name": "Living Room", "devices": ["light1", "tv1"]},
-                        {"id": "room2", "name": "Bedroom", "devices": ["light2", "ac1"]}
-                    ],
-                    "devices": [
-                        {"id": "light1", "name": "Living Room Light", "type": "LIGHT", "status": "off"},
-                        {"id": "tv1", "name": "Living Room TV", "type": "TV", "status": "off"},
-                        {"id": "light2", "name": "Bedroom Light", "type": "LIGHT", "status": "on"},
-                        {"id": "ac1", "name": "Bedroom AC", "type": "CONDITIONER", "status": "off"}
-                    ]
-                },
-                "switch_device_control": {
-                    "success": True,
-                    "message": f"Device {parameters.get('buttonId', 'unknown')} turned {parameters.get('action', 'unknown')}"
-                },
-                "control_air_conditioner": {
-                    "success": True,
-                    "message": f"AC set to {parameters.get('temp', '24')}°C, mode: {parameters.get('mode', 'auto')}"
-                },
-                "one_touch_control_all_devices": {
-                    "success": True,
-                    "message": f"All devices turned {parameters.get('command', 'unknown')}"
-                },
-                "one_touch_control_by_type": {
-                    "success": True,
-                    "message": f"All {parameters.get('device_type', 'unknown')} devices turned {parameters.get('action', 'unknown')}"
-                },
-                "create_device_cronjob": {
-                    "success": True,
-                    "message": f"Cronjob created for device {parameters.get('buttonId', 'unknown')}"
-                },
-                "room_one_touch_control": {
-                    "success": True,
-                    "message": f"Room {parameters.get('room_id', 'unknown')} executed {parameters.get('one_touch_code', 'unknown')}"
-                }
-            }
-            
-            mock_result = mock_responses.get(tool_name, {"success": True, "message": f"Tool {tool_name} executed"})
-            
-            print(f"✅ Tool '{tool_name}' executed successfully (MOCK)")
-            return {
-                "result": mock_result, 
-                "tool_name": tool_name, 
-                "parameters": parameters,
-                "mock": True
-            }
+            # Fallback to mock if MCP server fails
+            print(f"⚠️  MCP server call failed, falling back to mock for demo")
+            return self._get_mock_response(tool_name, parameters)
             
         except Exception as e:
             print(f"❌ Error calling tool '{tool_name}': {e}")
             return None
+    
+    def _call_real_mcp_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Optional[Dict]:
+        """Call real MCP server tool"""
+        try:
+            print(f"🔌 Calling real MCP tool '{tool_name}' with parameters: {parameters}")
+            
+            # Get session ID
+            session_id = self.get_session_id()
+            if not session_id:
+                print("❌ No session ID available")
+                return None
+            
+            # Prepare request payload
+            payload = {
+                "tool": tool_name,
+                "arguments": parameters,
+                "session_id": session_id
+            }
+            
+            # Call MCP server messages endpoint
+            response = self.session.post(
+                f"{self.base_url}/messages", 
+                json=payload,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ Real MCP tool '{tool_name}' executed successfully")
+                return {
+                    "result": result,
+                    "tool_name": tool_name,
+                    "parameters": parameters,
+                    "mock": False,
+                    "real_mcp": True
+                }
+            else:
+                print(f"❌ MCP server error: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Real MCP call failed: {e}")
+            return None
+    
+    def _get_mock_response(self, tool_name: str, parameters: Dict[str, Any]) -> Dict:
+        """Get mock response as fallback"""
+        print(f"🧪 Mock executing tool '{tool_name}' with parameters: {parameters}")
+        
+        # Mock responses cho từng tool
+        mock_responses = {
+            "get_device_list": {
+                "rooms": [
+                    {"id": "room1", "name": "Living Room", "devices": ["light1", "tv1"]},
+                    {"id": "room2", "name": "Bedroom", "devices": ["light2", "ac1"]}
+                ],
+                "devices": [
+                    {"id": "light1", "name": "Living Room Light", "type": "LIGHT", "status": "off"},
+                    {"id": "tv1", "name": "Living Room TV", "type": "TV", "status": "off"},
+                    {"id": "light2", "name": "Bedroom Light", "type": "LIGHT", "status": "on"},
+                    {"id": "ac1", "name": "Bedroom AC", "type": "CONDITIONER", "status": "off"}
+                ]
+            },
+            "switch_device_control": {
+                "success": True,
+                "message": f"Device {parameters.get('buttonId', 'unknown')} turned {parameters.get('action', 'unknown')}"
+            },
+            "control_air_conditioner": {
+                "success": True,
+                "message": f"AC set to {parameters.get('temp', '24')}°C, mode: {parameters.get('mode', 'auto')}"
+            },
+            "one_touch_control_all_devices": {
+                "success": True,
+                "message": f"All devices turned {parameters.get('command', 'unknown')}"
+            },
+            "one_touch_control_by_type": {
+                "success": True,
+                "message": f"All {parameters.get('device_type', 'unknown')} devices turned {parameters.get('action', 'unknown')}"
+            },
+            "create_device_cronjob": {
+                "success": True,
+                "message": f"Cronjob created for device {parameters.get('buttonId', 'unknown')}"
+            },
+            "room_one_touch_control": {
+                "success": True,
+                "message": f"Room {parameters.get('room_id', 'unknown')} executed {parameters.get('one_touch_code', 'unknown')}"
+            }
+        }
+        
+        mock_result = mock_responses.get(tool_name, {"success": True, "message": f"Tool {tool_name} executed"})
+        
+        print(f"✅ Tool '{tool_name}' executed successfully (MOCK)")
+        return {
+            "result": mock_result, 
+            "tool_name": tool_name, 
+            "parameters": parameters,
+            "mock": True,
+            "real_mcp": False
+        }
+            
+        # except Exception as e:
+        #     print(f"❌ Error calling tool '{tool_name}': {e}")
+        #     return None
     
     def list_tools(self) -> List[str]:
         """Liệt kê tất cả tools có sẵn"""

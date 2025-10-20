@@ -4,7 +4,7 @@ Enhanced app.py với MCP integration cho MetaAgent
 
 from src.agent.meta import MetaAgent
 from src.agent.plan import PlanAgent
-from src.agent.tool import ToolAgent
+from src.agent.tool import MCPToolAgent
 from src.inference.groq import ChatGroq
 from src.mcp_tools import get_mcp_tools, list_mcp_tool_names
 from os import environ
@@ -129,7 +129,7 @@ def main():
         # Test direct MCP Tool Agent
         api_key = environ.get("GROQ_API_KEY")
         llm = ChatGroq('llama-3.3-70b-versatile', api_key, temperature=0)
-        tool_agent = ToolAgent(llm=llm, verbose=True)
+        tool_agent = MCPToolAgent(llm=llm, verbose=True)
         
         user_input = input("Query for MCP Tool Agent: ")
         response = tool_agent.invoke(user_input)

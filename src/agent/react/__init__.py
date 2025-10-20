@@ -17,7 +17,7 @@ from os import getcwd
 import json
 
 class ReactAgent(BaseAgent):
-    def __init__(self,name:str='',description:str='',instructions:list[str]=[],tools:list=[],llm:BaseInference=None,max_iterations=10,dynamic_tools_file:str='experimental.py',json=False,verbose=False):
+    def __init__(self,name:str='',description:str='',instructions:list[str]=[],tools:list=[],llm:BaseInference=None,max_iterations=10,dynamic_tools_file:str='experimental.py',json=False,verbose=False,use_only_mcp_tools=True):
         self.name=name
         self.description=description
         self.instructions=self.get_instructions(instructions)
@@ -31,8 +31,17 @@ class ReactAgent(BaseAgent):
         self.dynamic_tools_module=import_module(dynamic_tools_file.split('.')[0])
         self.llm=llm
         self.verbose=verbose
+        self.use_only_mcp_tools=use_only_mcp_tools
         self.graph=self.create_graph()
-        self.add_tools_to_toolbox([user_interface_tool,*tools])
+        
+        # Only add non-MCP tools if explicitly allowed
+        if not use_only_mcp_tools:
+            self.add_tools_to_toolbox([user_interface_tool,*tools])
+        else:
+            if self.verbose:
+                print("🔌 ReactAgent configured to use ONLY MCP tools")
+                print("📋 Standard tools (user_interface_tool) are DISABLED")
+            # Add only MCP tools via tool_agent
 
     def reason(self,state:AgentState):
         if self.iteration%2!=0:
@@ -87,8 +96,12 @@ class ReactAgent(BaseAgent):
         if self.verbose:
             print(colored(f'Action Name: {action_name}',color='cyan',attrs=['bold']))
             print(colored(f'Action Input: {json.dumps(action_input,indent=2)}',color='cyan',attrs=['bold']))
+        
         if action_name not in self.tool_names:
-            observation="This tool is not available in the tool box."
+            if self.use_only_mcp_tools:
+                observation = f"Tool '{action_name}' not available. Only MCP tools can be used via the tool agent. Use 'tool' route to access MCP tools."
+            else:
+                observation = "This tool is not available in the tool box."
         else:
             tool=self.tools[action_name]
             try:
@@ -107,28 +120,32 @@ class ReactAgent(BaseAgent):
         message=(state['messages'][-1])
         response=extract_llm_response(message.content)
         query=response.get('Query')
+        
+        # Use MCPToolAgent for tool operations
         generator=MCPToolAgent(llm=self.llm,verbose=self.verbose)
-        tool_info=generator.invoke(query)
-        tool_name=tool_info.get('tool_name')
-        func_name=tool_info.get('func_name')
-        output=tool_info.get('output')
-        route=tool_info.get('route')
-        reload(self.dynamic_tools_module)
-        if route=='delete':
-            self.remove_tool_from_toolbox(tool_name)
-            content=f'{output} Now the tool is removed from the tool box.'        
+        tool_result=generator.invoke(query)
+        
+        # Extract information from MCPToolAgent response
+        route=tool_result.get('route', '')
+        output=tool_result.get('output', '')
+        
+        if self.verbose:
+            print(colored(f'MCP Tool Route: {route}', color='blue', attrs=['bold']))
+            print(colored(f'MCP Tool Output: {output}', color='cyan', attrs=['bold']))
+        
+        # Handle different routes from MCPToolAgent
+        if route == 'list_tools':
+            content = f'Available MCP Tools:\n{output}'
+        elif route == 'execute_tool':
+            content = f'Tool execution result:\n{output}'
+        elif route == 'get_tool_info':
+            content = f'Tool information:\n{output}'
+        elif route == 'search_tools':
+            content = f'Tool search results:\n{output}'
+        elif route == 'help_with_tool':
+            content = f'Tool help:\n{output}'
         else:
-            try:
-                tool=getattr(self.dynamic_tools_module,func_name)
-            except Exception as e:
-                print(e)
-            if route=='generate':
-                self.add_tools_to_toolbox([tool])
-            if route=='update':
-                self.update_tool_in_toolbox(tool)
-            if route=='debug':
-                self.update_tool_in_toolbox(tool)
-            content=f'{output} Now the tool is available in the tool box and ready for use.'
+            content = f'MCP Tool response:\n{output}'
         
         if self.verbose:
             print(colored(content,color='cyan',attrs=['bold']))
@@ -180,11 +197,35 @@ class ReactAgent(BaseAgent):
     def invoke(self,input:str)->str:
         if self.verbose:
             print(f'Entering '+colored(self.name,'black','on_white'))
+        
+        # Build tools description
+        tools_desc = f'[{',\n'.join(self.tools_description)}]' if self.tools_description else '[]'
+        
+        # Add MCP tools information if using only MCP tools
+        if self.use_only_mcp_tools:
+            tools_desc += f"""
+
+**Important: Only MCP Smart Home Tools Available**
+- Standard tools are DISABLED
+- Use 'tool' route to access MCP smart home tools:
+  * get_device_list: Get list of rooms and devices
+  * switch_device_control: Toggle devices on/off
+  * control_air_conditioner: Control AC settings
+  * one_touch_control_all_devices: Control all devices
+  * one_touch_control_by_type: Control devices by type
+  * create_device_cronjob: Create scheduled tasks
+  * room_one_touch_control: Room-specific controls
+
+**Route Options:**
+- 'tool': Access MCP smart home tools
+- 'final': Provide direct answer
+"""
+        
         parameters={
             'name':self.name,
             'description':self.description,
             'instructions':self.instructions,
-            'tools':f'[{',\n'.join(self.tools_description)}]',
+            'tools': tools_desc,
             'tool_names':self.tool_names
         }
         system_prompt=self.system_prompt.format(**parameters)

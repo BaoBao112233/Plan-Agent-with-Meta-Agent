@@ -105,13 +105,16 @@ class PlanAgent(BaseAgent):
 
     def initialize(self,state:UpdateState):
         system_prompt=read_markdown_file('./src/agent/plan/prompt/update.md')
-        current=state.get('plan')[0]
-        pending=state.get('plan')
-        completed=[]
+        plan_list = state.get('plan', [])
+        current = plan_list[0] if plan_list else ""
+        pending = plan_list or []
+        completed = []
         
         if self.verbose:
-            print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
-            print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+            if pending:
+                print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
+            if completed:
+                print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
         
         # Khởi tạo tất cả tasks với status "pending" trên API
         if self.api_enabled and self.api_client:
@@ -144,20 +147,60 @@ class PlanAgent(BaseAgent):
         if self.api_enabled and self.api_client:
             self.api_client.update_task_status(current, "completed", task_response)
         
-        user_prompt=f'Plan:\n{plan}\nTask:\n{current}\nTask Response:\n{task_response}'
+        # Truncate task_response if too long to prevent payload issues
+        max_response_length = 2000
+        if len(task_response) > max_response_length:
+            task_response_truncated = task_response[:max_response_length] + "... [response truncated for brevity]"
+        else:
+            task_response_truncated = task_response
+            
+        user_prompt=f'Plan:\n{plan}\nTask:\n{current}\nTask Response:\n{task_response_truncated}'
         messages=[HumanMessage(user_prompt)]
         return {**state,'messages':messages,'responses':[task_response]}
 
+    def trim_messages(self, messages, max_tokens=4000):
+        """Trim messages to prevent payload too large error"""
+        if not messages:
+            return messages
+            
+        # Keep only the most recent messages that fit within token limit
+        trimmed = []
+        total_chars = 0
+        
+        # Reverse to process from newest to oldest
+        for msg in reversed(messages):
+            msg_chars = len(str(msg.content))
+            if total_chars + msg_chars > max_tokens * 4:  # Rough char to token ratio
+                break
+            trimmed.insert(0, msg)
+            total_chars += msg_chars
+            
+        # Always keep at least the last message
+        if not trimmed and messages:
+            last_msg = messages[-1]
+            # Truncate content if too long
+            if len(str(last_msg.content)) > max_tokens * 4:
+                content = str(last_msg.content)[:max_tokens * 4] + "... [truncated]"
+                trimmed = [type(last_msg)(content)]
+            else:
+                trimmed = [last_msg]
+                
+        return trimmed
+
     def update_plan(self,state:UpdateState):
-        llm_response=self.llm.invoke(state.get('messages'))
+        # Trim messages to prevent payload too large
+        messages = self.trim_messages(state.get('messages', []))
+        llm_response=self.llm.invoke(messages)
         plan_data=extract_llm_response(llm_response.content)
         plan=plan_data.get('Plan')
-        pending=plan_data.get('Pending')
-        completed=plan_data.get('Completed')
+        pending=plan_data.get('Pending') or []  # Default to empty list if None
+        completed=plan_data.get('Completed') or []  # Default to empty list if None
         
         if self.verbose:
-            print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
-            print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+            if pending:
+                print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
+            if completed:
+                print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
         
         # Update task statuses trên API
         if self.api_enabled and self.api_client:
@@ -185,8 +228,9 @@ class PlanAgent(BaseAgent):
             current=pending[0]
         else:
             current=''
-        completed=plan_data.get('Completed')
-        return {**state,'plan':plan,'current':current,'pending':pending,'completed':completed}
+        # Keep the completed list we already processed instead of overwriting with potentially None
+        completed_final = plan_data.get('Completed') or []
+        return {**state,'plan':plan,'current':current,'pending':pending,'completed':completed_final}
     
     def final(self,state:UpdateState):
         user_prompt='All Tasks completed successfully. Now give the final answer.'

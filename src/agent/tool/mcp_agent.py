@@ -1,7 +1,5 @@
-from src.agent.tool.utils import read_markdown_file
 from langchain_core.runnables.graph import MermaidDrawMethod
 from src.message import HumanMessage, SystemMessage
-from src.agent.tool.state import AgentState
 from langgraph.graph import StateGraph, END
 # from IPython.display import display, Image  # Optional import
 from src.inference import BaseInference
@@ -9,6 +7,13 @@ from src.router import LLMRouter
 from src.agent import BaseAgent
 from src.mcp_client import MCPClient
 # from termcolor import colored  # Optional import
+from typing import TypedDict
+
+# Define AgentState for MCPToolAgent
+class AgentState(TypedDict):
+    input: str
+    route: str
+    output: str
 import json
 
 def colored(text, color=None, on_color=None, attrs=None):
@@ -18,7 +23,7 @@ def colored(text, color=None, on_color=None, attrs=None):
 class MCPToolAgent(BaseAgent):
     """Tool Agent sử dụng MCP server thay vì tự tạo tools"""
     
-    def __init__(self, mcp_url: str = None, llm: BaseInference = None, verbose=False):
+    def __init__(self, llm: BaseInference = None, mcp_url: str = None, verbose=False):
         self.name = 'MCP Tool Agent'
         self.llm = llm
         self.verbose = verbose
@@ -38,6 +43,25 @@ class MCPToolAgent(BaseAgent):
     
     def router(self, state: AgentState):
         """Route query để xác định action cần thực hiện"""
+        input_value = state.get('input', '') or ''  # Handle None case
+        input_text = input_value.lower() if input_value else ''
+        
+        # Simple keyword-based routing when LLM not available
+        if self.llm is None:
+            if any(keyword in input_text for keyword in ['list', 'available', 'tools', 'show']):
+                return {**state, 'route': 'list_tools'}
+            elif any(keyword in input_text for keyword in ['search', 'find']):
+                return {**state, 'route': 'search_tools'}
+            elif any(keyword in input_text for keyword in ['info', 'detail', 'describe']):
+                return {**state, 'route': 'get_tool_info'}
+            elif any(keyword in input_text for keyword in ['help', 'how']):
+                return {**state, 'route': 'help_with_tool'}
+            elif any(keyword in input_text for keyword in ['run', 'execute', 'call', 'control', 'turn', 'get']):
+                return {**state, 'route': 'execute_tool'}
+            else:
+                return {**state, 'route': 'list_tools'}  # Default to list_tools
+        
+        # Use LLM routing when available
         routes = [
             {
                 'name': 'list_tools',
@@ -62,7 +86,8 @@ class MCPToolAgent(BaseAgent):
         ]
         
         llm_router = LLMRouter(routes=routes, llm=self.llm, verbose=False)
-        route = llm_router.invoke(state.get('input'))
+        input_query = state.get('input') or ''
+        route = llm_router.invoke(input_query)
         return {**state, 'route': route}
     
     def list_tools(self, state: AgentState):
@@ -82,7 +107,7 @@ class MCPToolAgent(BaseAgent):
     
     def search_tools(self, state: AgentState):
         """Tìm kiếm tools dựa trên query"""
-        query = state.get('input')
+        query = state.get('input') or ''
         
         # Extract search keywords từ query
         search_keywords = self.extract_search_keywords(query)
@@ -117,8 +142,10 @@ class MCPToolAgent(BaseAgent):
         return {**state, 'output': output}
     
     def get_tool_info(self, state: AgentState):
-        """Lấy thông tin chi tiết của một tool"""
-        query = state.get('input')
+        """Lấy thông tin chi tiết về một tool cụ thể"""
+        query = state.get('input') or ''
+        
+        # Extract tool name từ query
         tool_name = self.extract_tool_name(query)
         
         if not tool_name:
@@ -156,7 +183,7 @@ class MCPToolAgent(BaseAgent):
     
     def execute_tool(self, state: AgentState):
         """Thực thi một tool với parameters được cung cấp"""
-        query = state.get('input')
+        query = state.get('input') or ''
         
         # Sử dụng LLM để extract tool name và parameters từ query
         execution_info = self.extract_execution_info(query)
@@ -173,10 +200,27 @@ class MCPToolAgent(BaseAgent):
             output = f"❌ Tool '{tool_name}' not found. Use 'list tools' to see available tools."
             return {**state, 'output': output}
         
+        # Auto-fill missing required parameters với defaults
+        parameters = self.auto_fill_parameters(tool_name, parameters, query)
+        
         # Validate parameters
         is_valid, errors = self.mcp_client.validate_parameters(tool_name, parameters)
         if not is_valid:
+            # Show parameter hints instead of hard failure
             output = f"❌ Parameter validation failed:\n" + "\n".join([f"  • {error}" for error in errors])
+            
+            # Add helpful parameter hints
+            tool_info = self.mcp_client.get_tool_info(tool_name)
+            if tool_info:
+                required_params = tool_info.get('inputSchema', {}).get('required', [])
+                if required_params:
+                    output += f"\n\n💡 **Required parameters for {tool_name}:**\n"
+                    params_info = tool_info.get('parameters', {})
+                    for param in required_params:
+                        param_info = params_info.get(param, {})
+                        param_desc = param_info.get('description', 'No description')
+                        output += f"  • `{param}`: {param_desc}\n"
+            
             return {**state, 'output': output}
         
         # Execute tool
@@ -185,9 +229,25 @@ class MCPToolAgent(BaseAgent):
         if result is None:
             output = f"❌ Failed to execute tool '{tool_name}'"
         else:
-            output = f"✅ **{tool_name}** executed successfully:\n\n"
+            # Check if it's real MCP or mock
+            is_real_mcp = result.get('real_mcp', False)
+            is_mock = result.get('mock', False)
+            
+            if is_real_mcp:
+                output = f"🔌 **{tool_name}** executed via REAL MCP SERVER:\n\n"
+            elif is_mock:
+                output = f"🧪 **{tool_name}** executed via MOCK (MCP server unavailable):\n\n"
+            else:
+                output = f"✅ **{tool_name}** executed:\n\n"
+            
+            # Format result nicely
             if isinstance(result, dict):
-                output += json.dumps(result, indent=2, ensure_ascii=False)
+                # Display the actual result data
+                actual_result = result.get('result', result)
+                if isinstance(actual_result, dict):
+                    output += json.dumps(actual_result, indent=2, ensure_ascii=False)
+                else:
+                    output += str(actual_result)
             else:
                 output += str(result)
         
@@ -195,7 +255,7 @@ class MCPToolAgent(BaseAgent):
     
     def help_with_tool(self, state: AgentState):
         """Cung cấp help và guidance cho tool usage"""
-        query = state.get('input')
+        query = state.get('input') or ''
         tool_name = self.extract_tool_name(query)
         
         if not tool_name:
@@ -269,6 +329,104 @@ Example usage:
         
         return keywords
     
+    def auto_fill_parameters(self, tool_name: str, parameters: dict, query: str) -> dict:
+        """Auto-fill missing required parameters với reasonable defaults"""
+        tool_info = self.mcp_client.get_tool_info(tool_name)
+        if not tool_info:
+            return parameters
+        
+        required_params = tool_info.get('inputSchema', {}).get('required', [])
+        params_info = tool_info.get('parameters', {})
+        
+        # Create a copy to avoid modifying original
+        filled_params = parameters.copy()
+        query_lower = query.lower()
+        
+        for param in required_params:
+            if param not in filled_params:
+                param_info = params_info.get(param, {})
+                param_type = param_info.get('type', 'string')
+                
+                # Smart parameter filling based on parameter name and query context
+                if param == 'token':
+                    filled_params[param] = "demo_token"
+                elif param == 'buttonId':
+                    # Try to extract number from query, otherwise use default
+                    import re
+                    numbers = re.findall(r'\d+', query)
+                    filled_params[param] = int(numbers[0]) if numbers else 1  # Integer not string
+                elif param == 'action':
+                    if any(word in query_lower for word in ['on', 'turn on', 'enable', 'start']):
+                        filled_params[param] = "on"
+                    elif any(word in query_lower for word in ['off', 'turn off', 'disable', 'stop']):
+                        filled_params[param] = "off"
+                    else:
+                        filled_params[param] = "on"  # Default
+                elif param == 'command':
+                    if any(word in query_lower for word in ['on', 'turn on', 'enable']):
+                        filled_params[param] = "on"
+                    elif any(word in query_lower for word in ['off', 'turn off', 'disable']):
+                        filled_params[param] = "off"
+                    else:
+                        filled_params[param] = "on"
+                elif param == 'device_type':
+                    if 'light' in query_lower:
+                        filled_params[param] = "LIGHT"
+                    elif 'ac' in query_lower or 'air' in query_lower or 'conditioner' in query_lower:
+                        filled_params[param] = "CONDITIONER"
+                    elif 'tv' in query_lower:
+                        filled_params[param] = "TV"
+                    else:
+                        filled_params[param] = "LIGHT"  # Default
+                elif param == 'room_id':
+                    # Extract room from query
+                    rooms = ['living room', 'bedroom', 'kitchen', 'bathroom']
+                    for room in rooms:
+                        if room in query_lower:
+                            filled_params[param] = room.replace(' ', '_')
+                            break
+                    else:
+                        filled_params[param] = "living_room"  # Default
+                elif param in ['power', 'mode', 'temp', 'fan_speed', 'swing_h', 'swing_v']:
+                    # AC specific parameters
+                    if param == 'power':
+                        filled_params[param] = "on" if 'on' in query_lower else "off"
+                    elif param == 'mode':
+                        if 'cool' in query_lower:
+                            filled_params[param] = "cool"
+                        elif 'heat' in query_lower:
+                            filled_params[param] = "heat"
+                        else:
+                            filled_params[param] = "auto"
+                    elif param == 'temp':
+                        # Try to extract temperature from query
+                        import re
+                        temps = re.findall(r'(\d{1,2})\s*(?:degree|°|celsius|c)', query_lower)
+                        filled_params[param] = temps[0] if temps else "24"  # String not int
+                    elif param == 'fan_speed':
+                        if 'high' in query_lower:
+                            filled_params[param] = "high"
+                        elif 'low' in query_lower:
+                            filled_params[param] = "low"
+                        else:
+                            filled_params[param] = "auto"
+                    elif param in ['swing_h', 'swing_v']:
+                        filled_params[param] = "off"
+                elif param_type == 'boolean':
+                    filled_params[param] = True
+                elif param_type == 'integer':
+                    filled_params[param] = 1
+                else:
+                    # String type, provide generic default
+                    filled_params[param] = f"default_{param}"
+        
+        if filled_params != parameters:
+            if self.verbose:
+                added_params = {k: v for k, v in filled_params.items() if k not in parameters}
+                print(f"🔧 Auto-filled parameters: {added_params}")
+        
+        return filled_params
+    
     def extract_tool_name(self, query: str) -> str:
         """Extract tool name từ query"""
         available_tools = self.mcp_client.list_tools()
@@ -289,29 +447,63 @@ Example usage:
     
     def extract_execution_info(self, query: str) -> dict:
         """Extract tool name và parameters từ execution query sử dụng LLM"""
-        system_prompt = """You are a tool execution parser. Extract tool name and parameters from user query.
+        
+        # Get detailed tool information for better parameter extraction
+        tools_info = []
+        for tool_name in self.mcp_client.list_tools():
+            tool_info = self.mcp_client.get_tool_info(tool_name)
+            if tool_info:
+                required_params = tool_info.get('inputSchema', {}).get('required', [])
+                params_info = tool_info.get('parameters', {})
+                
+                tool_desc = f"- {tool_name}: {tool_info.get('description', '')}"
+                if required_params:
+                    param_details = []
+                    for param in required_params:
+                        param_info = params_info.get(param, {})
+                        param_type = param_info.get('type', 'string')
+                        param_details.append(f"{param}({param_type})")
+                    tool_desc += f" | Required: {', '.join(param_details)}"
+                tools_info.append(tool_desc)
+        
+        system_prompt = f"""You are a smart home tool execution parser. Extract tool name and parameters from user query.
 
-Available tools: {tools}
+Available tools:
+{chr(10).join(tools_info)}
+
+Rules:
+1. If user asks to "list" or "show" tools → Don't extract parameters, return empty
+2. If user wants to execute a tool → Extract the most appropriate tool and provide required parameters
+3. For missing required parameters, use reasonable defaults or ask user
+
+Common parameter patterns:
+- token: Use "demo_token" as default
+- buttonId: Extract number from context as integer (e.g., 1, 2, 3)
+- action: "on"/"off" based on user intent
+- room_id: Extract room name from query
+- device_type: "LIGHT", "AC", "TV" etc.
+- temp: Temperature as string (e.g., "22", "25")
 
 Return JSON format:
 {{
-    "tool_name": "exact_tool_name",
+    "tool_name": "exact_tool_name_or_empty",
     "parameters": {{
         "param1": "value1",
         "param2": "value2"
     }}
 }}
 
-If no clear parameters provided, return empty parameters dict.
-If tool name not clear, return empty tool_name.
+Examples:
+- "get device list" → {{"tool_name": "get_device_list", "parameters": {{"token": "demo_token"}}}}
+- "turn on light 3" → {{"tool_name": "switch_device_control", "parameters": {{"token": "demo_token", "buttonId": 3, "action": "on"}}}}
+- "turn on bedroom light" → {{"tool_name": "switch_device_control", "parameters": {{"token": "demo_token", "buttonId": 1, "action": "on"}}}}
+- "set AC to 22 degrees" → {{"tool_name": "control_air_conditioner", "parameters": {{"power": "on", "temp": "22", "mode": "auto"}}}}
+- "list tools" → {{"tool_name": "", "parameters": {{}}}}
 """
-        
-        tools_list = self.mcp_client.list_tools()
-        formatted_prompt = system_prompt.format(tools=", ".join(tools_list))
         
         try:
             response = self.llm.invoke([
-                SystemMessage(formatted_prompt),
+                SystemMessage(system_prompt),
                 HumanMessage(f"Parse this query: {query}")
             ], json=True)
             
