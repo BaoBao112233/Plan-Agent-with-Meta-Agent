@@ -6,3 +6,8 @@ requests
 ipython
 python-dotenv
 pydantic
+fastapi
+uvicorn[standard]
+httpx
+jinja2
+python-multipart
