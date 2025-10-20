@@ -75,6 +75,53 @@ def extract_llm_response(xml_response: str) -> dict:
 
     return result
 
+def extract_priority_plans(response):
+    """Extract the 3 priority plans from priority_plan.md response"""
+    extracted_data = {
+        'Security_Plan': [],
+        'Convenience_Plan': [],
+        'Energy_Plan': []
+    }
+    
+    # Split response into lines for easier processing
+    lines = response.split('\n')
+    current_plan = None
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Look for plan headers
+        if "Plan 1:" in line or "Maximum Security" in line or "🥇" in line:
+            current_plan = 'Security_Plan'
+        elif "Plan 2:" in line or "Balanced Comfort" in line or "🥈" in line:
+            current_plan = 'Convenience_Plan'
+        elif "Plan 3:" in line or "Energy-Efficient" in line or "🥉" in line:
+            current_plan = 'Energy_Plan'
+        # Look for numbered tasks
+        elif current_plan and re.match(r'^\d+\.', line):
+            # Extract task text (remove number prefix)
+            task = re.sub(r'^\d+\.\s*', '', line)
+            if task:  # Only add non-empty tasks
+                extracted_data[current_plan].append(task)
+    
+    # If we couldn't find the specific headers, try alternative parsing
+    if not any(extracted_data.values()):
+        # Try to find tasks under any plan structure
+        plan_patterns = [
+            (r'(?:plan\s+1|security|🥇).*?(?=plan\s+2|convenience|🥈|$)', 'Security_Plan'),
+            (r'(?:plan\s+2|convenience|🥈).*?(?=plan\s+3|energy|🥉|$)', 'Convenience_Plan'),
+            (r'(?:plan\s+3|energy|🥉).*?(?=plan\s+4|custom|$)', 'Energy_Plan')
+        ]
+        
+        for pattern, plan_key in plan_patterns:
+            match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
+            if match:
+                plan_text = match.group(0)
+                tasks = re.findall(r'(\d+)\.\s*(.*)', plan_text)
+                extracted_data[plan_key] = [task[1].strip() for task in tasks if task[1].strip()]
+    
+    return extracted_data
+
 def read_markdown_file(file_path: str) -> str:
     with open(file_path, 'r',encoding='utf-8') as f:
         markdown_content = f.read()

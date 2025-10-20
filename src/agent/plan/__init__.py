@@ -35,6 +35,10 @@ class PlanAgent(BaseAgent):
             {
                 'route': 'advanced',
                 'description': 'This route is tailored for more complex, involved or ambiguous tasks that require additional information or user preferences. It involves multiple interactions to refine the plan based on specific needs, ensuring a more comprehensive and customized solution. This route is ideal for tasks that need deeper understanding or nuanced decision-making.'
+            },
+            {
+                'route': 'priority',
+                'description': 'This route creates 3 alternative plans prioritized by Security, Convenience, and Energy Efficiency. The user can review all options and select the most suitable plan based on their priorities. Ideal for tasks where multiple approaches exist and user preference matters for the implementation strategy.'
             }
         ]
         query=state.get('input')
@@ -101,6 +105,82 @@ class PlanAgent(BaseAgent):
             self.api_client.send_plan_status(api_data)
         
         return {**state,'plan':plan}
+
+    def priority_plan(self,state:PlanState):
+        from src.agent.plan.utils import extract_priority_plans
+        system_prompt=read_markdown_file('./src/agent/plan/prompt/priority_plan.md')
+        llm_response=self.llm.invoke([SystemMessage(system_prompt),HumanMessage(state.get('input'))])
+        plan_data=extract_priority_plans(llm_response.content)
+        
+        # Extract the 3 priority plans
+        security_plan = plan_data.get('Security_Plan', [])
+        convenience_plan = plan_data.get('Convenience_Plan', [])
+        energy_plan = plan_data.get('Energy_Plan', [])
+        
+        if self.verbose:
+            print(colored('\n=== PRIORITY PLANNING OPTIONS ===', color='magenta', attrs=['bold']))
+            print(colored('\n1. SECURITY PRIORITY PLAN:', color='red', attrs=['bold']))
+            print('\n'.join([f'   {index+1}. {task}' for index,task in enumerate(security_plan)]))
+            
+            print(colored('\n2. CONVENIENCE PRIORITY PLAN:', color='blue', attrs=['bold']))
+            print('\n'.join([f'   {index+1}. {task}' for index,task in enumerate(convenience_plan)]))
+            
+            print(colored('\n3. ENERGY EFFICIENCY PRIORITY PLAN:', color='green', attrs=['bold']))
+            print('\n'.join([f'   {index+1}. {task}' for index,task in enumerate(energy_plan)]))
+        
+        # User selection
+        print(colored('\nPlease select your preferred plan:', color='yellow', attrs=['bold']))
+        print('1. Security Priority Plan (Focus: Maximum safety and security)')
+        print('2. Convenience Priority Plan (Focus: User experience and ease of use)')
+        print('3. Energy Efficiency Priority Plan (Focus: Minimal resource consumption)')
+        
+        while True:
+            try:
+                choice = input('\nEnter your choice (1-3): ').strip()
+                if choice == '1':
+                    selected_plan = security_plan
+                    plan_type = 'priority_security'
+                    break
+                elif choice == '2':
+                    selected_plan = convenience_plan
+                    plan_type = 'priority_convenience'
+                    break
+                elif choice == '3':
+                    selected_plan = energy_plan
+                    plan_type = 'priority_energy'
+                    break
+                else:
+                    print(colored('Please enter 1, 2, or 3.', color='red'))
+            except (EOFError, KeyboardInterrupt):
+                print(colored('\nDefaulting to Security Priority Plan.', color='yellow'))
+                selected_plan = security_plan
+                plan_type = 'priority_security'
+                break
+        
+        if self.verbose:
+            print(colored(f'\nSelected Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(selected_plan)])}',color='green',attrs=['bold']))
+        
+        # Only send selected plan to API (not during generation phase)
+        if self.api_enabled and self.api_client and selected_plan:
+            api_data = {
+                "input": state.get('input'),
+                "plan_type": plan_type,
+                "current_plan": selected_plan,
+                "pending_tasks": selected_plan.copy(),
+                "completed_tasks": [],
+                "current_task": selected_plan[0] if selected_plan else "",
+                "status": "plan_created",
+                "timestamp": datetime.now().isoformat(),
+                "priority_options": {
+                    "security_plan": security_plan,
+                    "convenience_plan": convenience_plan,
+                    "energy_plan": energy_plan,
+                    "selected_priority": plan_type.replace('priority_', '')
+                }
+            }
+            self.api_client.send_plan_status(api_data)
+        
+        return {**state,'plan':selected_plan}
 
 
     def initialize(self,state:UpdateState):
@@ -261,12 +341,14 @@ class PlanAgent(BaseAgent):
         graph.add_node('route',self.router)
         graph.add_node('simple',self.simple_plan)
         graph.add_node('advanced',self.advance_plan)
+        graph.add_node('priority',self.priority_plan)
         graph.add_node('execute',lambda _:self.update_graph())
 
         graph.add_edge(START,'route')
         graph.add_conditional_edges('route',self.route_controller)
         graph.add_edge('simple','execute')
         graph.add_edge('advanced','execute')
+        graph.add_edge('priority','execute')
         graph.add_edge('execute',END)
 
         return graph.compile(debug=False)

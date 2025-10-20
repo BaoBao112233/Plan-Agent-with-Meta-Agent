@@ -22,7 +22,13 @@ class COTAgent(BaseAgent):
         self.system_prompt=read_markdown_file('./src/agent/cot/prompt.md')
 
     def get_instructions(self,instructions):
-        return '\n'.join([f'{i+1}. {instruction}' for i,instruction in enumerate(instructions)])
+        if instructions is None:
+            return "No specific instructions provided."
+        if isinstance(instructions, str):
+            return instructions
+        if isinstance(instructions, list):
+            return '\n'.join([f'{i+1}. {instruction}' for i,instruction in enumerate(instructions)])
+        return str(instructions)
 
     def reason(self,state:AgentState):
         if self.max_iteration>self.iteration:
