@@ -27,24 +27,16 @@ class PlanAgent(BaseAgent):
         self.current_input=None
     
     def router(self,state:PlanState):
+        # Only use Priority Planning - no custom tools, only MCP tools
         routes=[
             {
-                'route': 'simple',
-                'description': 'This route handles straightforward tasks with no user interaction. It generates a plan in one step, making it ideal for clear, uncomplicated problems that can be quickly solved.'
-            },
-            {
-                'route': 'advanced',
-                'description': 'This route is tailored for more complex, involved or ambiguous tasks that require additional information or user preferences. It involves multiple interactions to refine the plan based on specific needs, ensuring a more comprehensive and customized solution. This route is ideal for tasks that need deeper understanding or nuanced decision-making.'
-            },
-            {
                 'route': 'priority',
-                'description': 'This route creates 3 alternative plans prioritized by Security, Convenience, and Energy Efficiency. The user can review all options and select the most suitable plan based on their priorities. Ideal for tasks where multiple approaches exist and user preference matters for the implementation strategy.'
+                'description': 'This route creates 3 alternative plans prioritized by Security, Convenience, and Energy Efficiency using ONLY MCP smart home tools. The user can review all options and select the most suitable plan. All device information and control operations are handled through MCP tools only.'
             }
         ]
         query=state.get('input')
-        router=LLMRouter(routes=routes,llm=self.llm,verbose=False)
-        plan_type=router.invoke(query)
-        return {**state,'plan_type':plan_type}
+        # Since we only have one route, always return 'priority'
+        return {**state,'plan_type':'priority'}
 
     def simple_plan(self,state:PlanState):
         system_prompt=read_markdown_file('./src/agent/plan/prompt/simple_plan.md')
@@ -339,15 +331,13 @@ class PlanAgent(BaseAgent):
     def create_graph(self):
         graph=StateGraph(PlanState)
         graph.add_node('route',self.router)
-        graph.add_node('simple',self.simple_plan)
-        graph.add_node('advanced',self.advance_plan)
+        # Only priority planning - MCP tools only approach
         graph.add_node('priority',self.priority_plan)
         graph.add_node('execute',lambda _:self.update_graph())
 
         graph.add_edge(START,'route')
         graph.add_conditional_edges('route',self.route_controller)
-        graph.add_edge('simple','execute')
-        graph.add_edge('advanced','execute')
+        # Direct flow: route -> priority -> execute
         graph.add_edge('priority','execute')
         graph.add_edge('execute',END)
 

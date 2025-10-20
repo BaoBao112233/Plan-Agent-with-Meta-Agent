@@ -3,7 +3,6 @@ from src.message import AIMessage,HumanMessage,SystemMessage
 from langchain_core.runnables.graph import MermaidDrawMethod
 from src.tool.prebuilt import user_interface_tool
 from src.agent.react.state import AgentState
-from importlib import reload,import_module
 from IPython.display import display,Image
 from src.inference import BaseInference
 from langgraph.graph import StateGraph
@@ -17,7 +16,7 @@ from os import getcwd
 import json
 
 class ReactAgent(BaseAgent):
-    def __init__(self,name:str='',description:str='',instructions:list[str]=[],tools:list=[],llm:BaseInference=None,max_iterations=10,dynamic_tools_file:str='experimental.py',json=False,verbose=False,use_only_mcp_tools=True):
+    def __init__(self,name:str='',description:str='',instructions:list[str]=[],tools:list=[],llm:BaseInference=None,max_iterations=10,json=False,verbose=False,use_only_mcp_tools=True):
         self.name=name
         self.description=description
         self.instructions=self.get_instructions(instructions)
@@ -27,21 +26,23 @@ class ReactAgent(BaseAgent):
         self.tools_description=[]
         self.tools={}
         self.iteration=0
-        self.dynamic_tools_file=dynamic_tools_file
-        self.dynamic_tools_module=import_module(dynamic_tools_file.split('.')[0])
+        # Remove dynamic_tools_file and module since we only use MCP tools
         self.llm=llm
         self.verbose=verbose
         self.use_only_mcp_tools=use_only_mcp_tools
         self.graph=self.create_graph()
         
-        # Only add non-MCP tools if explicitly allowed
+        # Only add non-MCP tools if explicitly allowed (which it shouldn't be in MCP-only mode)
         if not use_only_mcp_tools:
             self.add_tools_to_toolbox([user_interface_tool,*tools])
+            if self.verbose:
+                print("⚠️  WARNING: Non-MCP tools enabled")
         else:
             if self.verbose:
                 print("🔌 ReactAgent configured to use ONLY MCP tools")
                 print("📋 Standard tools (user_interface_tool) are DISABLED")
-            # Add only MCP tools via tool_agent
+                print("🚫 Dynamic tool loading DISABLED (no experimental.py needed)")
+            # All tools will be accessed via MCPToolAgent only
 
     def reason(self,state:AgentState):
         if self.iteration%2!=0:
