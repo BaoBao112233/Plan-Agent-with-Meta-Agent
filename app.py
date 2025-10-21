@@ -291,43 +291,43 @@ def show_help():
     print()
 
 def main():
-    """Main application entry point with MCP-Only OXII MasterController logic"""
-    display_banner()
+    # """Main application entry point with MCP-Only OXII MasterController logic"""
+    # display_banner()
     
-    while True:
-        print("🎯 Select Mode (MCP Tools Only):")
-        print("   1. MCP Priority Planning (Only Available Mode)")
-        print("   2. MCP Tool Integration (Direct Access)")
-        print("   3. Full MCP Workflow (Complete Pipeline)")
-        print("   4. Help & Features")
-        print("   5. Exit")
-        print()
-        print("📌 Note: This system uses ONLY MCP Smart Home Tools")
-        print("   - No custom tools created")
-        print("   - All device operations via MCP")
-        print("   - get_device_list validates devices first")
-        print()
+    # while True:
+    #     print("🎯 Select Mode (MCP Tools Only):")
+    #     print("   1. MCP Priority Planning (Only Available Mode)")
+    #     print("   2. MCP Tool Integration (Direct Access)")
+    #     print("   3. Full MCP Workflow (Complete Pipeline)")
+    #     print("   4. Help & Features")
+    #     print("   5. Exit")
+    #     print()
+    #     print("📌 Note: This system uses ONLY MCP Smart Home Tools")
+    #     print("   - No custom tools created")
+    #     print("   - All device operations via MCP")
+    #     print("   - get_device_list validates devices first")
+    #     print()
         
-        choice = input("Enter your choice (1-5): ").strip()
+    #     choice = input("Enter your choice (1-5): ").strip()
         
-        if choice == "1":
-            test_priority_planning()
-        elif choice == "2":
-            test_mcp_integration()
-        elif choice == "3":
+    #     if choice == "1":
+    #         test_priority_planning()
+    #     elif choice == "2":
+    #         test_mcp_integration()
+        # elif choice == "3":
             test_full_workflow()
-        elif choice == "4":
-            show_help()
-        elif choice == "5":
-            print("\n👋 Thank you for using MCP-Only OXII MasterController!")
-            print("🏠 Your smart home automation system is ready with MCP tools.")
-            sys.exit(0)
-        else:
-            print("❌ Invalid choice. Please select 1-5.")
+        # elif choice == "4":
+        #     show_help()
+        # elif choice == "5":
+        #     print("\n👋 Thank you for using MCP-Only OXII MasterController!")
+        #     print("🏠 Your smart home automation system is ready with MCP tools.")
+        #     sys.exit(0)
+        # else:
+        #     print("❌ Invalid choice. Please select 1-5.")
         
-        print("\n" + "=" * 60)
-        input("Press Enter to continue...")
-        print()
+        # print("\n" + "=" * 60)
+        # input("Press Enter to continue...")
+        # print()
 
 if __name__ == "__main__":
     try:

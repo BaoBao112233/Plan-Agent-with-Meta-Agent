@@ -17,9 +17,9 @@ def test_mcp_agent_with_dual_keys():
         from src.agent.tool.mcp_agent import MCPToolAgent
         from src.inference.groq import ChatGroq
         
-        # Create LLM with dual key support
+        # Create LLM with single API key
         llm = ChatGroq()
-        print(f"🔑 Loaded {len(llm.api_keys)} API keys for failover")
+        print(f"🔑 Using single API key from environment")
         
         # Create MCP agent
         agent = MCPToolAgent(llm=llm, verbose=True)

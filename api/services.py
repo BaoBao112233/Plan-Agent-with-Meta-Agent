@@ -333,7 +333,7 @@ class HealthService:
             # Check Groq API
             try:
                 llm = ChatGroq()
-                groq_status = f"configured ({len(llm.api_keys)} keys)"
+                groq_status = "configured (single key)"
             except Exception:
                 groq_status = "not configured"
             

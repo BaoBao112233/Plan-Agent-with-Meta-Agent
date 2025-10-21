@@ -150,9 +150,8 @@ from os import environ
 
 load_dotenv()
 
-# Setup
-api_key = environ.get("GROQ_API_KEY")
-llm = ChatGroq('llama-3.3-70b-versatile', api_key, temperature=0)
+# Setup - API key is automatically loaded from environment
+llm = ChatGroq('llama-3.3-70b-versatile', temperature=0)
 
 # Create agent with API enabled
 agent = PlanAgent(llm=llm, verbose=True, api_enabled=True)

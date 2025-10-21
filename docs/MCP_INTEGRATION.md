@@ -52,7 +52,7 @@ docker compose up -d
 from src.agent.tool import ToolAgent  # Imports MCPToolAgent
 from src.inference.groq import ChatGroq
 
-llm = ChatGroq('llama-3.3-70b-versatile', api_key, temperature=0)
+llm = ChatGroq('llama-3.3-70b-versatile', temperature=0)
 tool_agent = ToolAgent(llm=llm, verbose=True)
 
 # List all available tools
