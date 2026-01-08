@@ -39,6 +39,12 @@ class PlanAgent(BaseAgent):
         system_prompt=read_markdown_file('./src/agent/plan/prompt/simple_plan.md')
         llm_response=self.llm.invoke([SystemMessage(system_prompt),HumanMessage(state.get('input'))])
         plan_data=extract_plan(llm_response.content)
+        
+        if not plan_data:
+            print(colored(f"Error: Could not extract plan from LLM response. Response was: {llm_response.content[:200]}...", color="red"))
+            # Fallback or retry logic could go here
+            return {**state, 'plan': []}
+            
         plan=plan_data.get('Plan')
         if self.verbose:
             print(colored(f'Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])}',color='green',attrs=['bold']))
@@ -49,6 +55,15 @@ class PlanAgent(BaseAgent):
         messages=[SystemMessage(system_prompt),HumanMessage(state.get('input'))]
         llm_response=self.llm.invoke(messages)
         plan_data=extract_plan(llm_response.content)
+        
+        if not plan_data:
+            # If extraction fails, we might still have a conversational response from the LLM
+            # Let's try to ask the user anyway or handle it gracefully
+            print(colored(f"Warning: Could not extract plan data. LLM says: {llm_response.content}", color="yellow"))
+            # For simplicity in this demo, it might be better to just return the response as a question?
+            # But the loop depends on 'route'.
+            return {**state, 'plan': ["Solve the user's request: " + state.get('input')]}
+
         route=plan_data.get('Route')
         while route!='Plan':
             question=plan_data.get('Question')
@@ -59,9 +74,15 @@ class PlanAgent(BaseAgent):
             llm_response=self.llm.invoke(messages)
             messages.append(AIMessage(llm_response.content))
             plan_data=extract_plan(llm_response.content)
+            
+            if not plan_data:
+                print(colored(f"Error: Lost track of the plan format. LLM response: {llm_response.content}", color="red"))
+                break
+                
             route=plan_data.get('Route')
-        plan=plan_data.get('Plan')
-        if self.verbose:
+            
+        plan=plan_data.get('Plan') if plan_data else []
+        if self.verbose and plan:
             print(colored(f'Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])}',color='green',attrs=['bold']))
         return {**state,'plan':plan}
 
@@ -93,17 +114,18 @@ class PlanAgent(BaseAgent):
     def update_plan(self,state:UpdateState):
         llm_response=self.llm.invoke(state.get('messages'))
         plan_data=extract_llm_response(llm_response.content)
-        plan=plan_data.get('Plan')
-        pending=plan_data.get('Pending')
-        completed=plan_data.get('Completed')
+        plan=plan_data.get('Current Plan') or plan_data.get('Plan') or []
+        pending=plan_data.get('Pending') or []
+        completed=plan_data.get('Completed') or []
+        
         if self.verbose:
-            print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
-            print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
-        if pending:
-            current=pending[0]
-        else:
-            current=''
-        completed=plan_data.get('Completed')
+            if pending:
+                print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
+            if completed:
+                print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+        
+        current = pending[0] if pending else ''
+        
         return {**state,'plan':plan,'current':current,'pending':pending,'completed':completed}
     
     def final(self,state:UpdateState):

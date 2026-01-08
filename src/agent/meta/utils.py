@@ -1,11 +1,54 @@
 import xml.etree.ElementTree as ET
+import re
 
 def extract_from_xml(xml_string):
+    # Try to find the <Agent> block in case LLM added extra text
+    match = re.search(r'<Agent>.*?</Agent>', xml_string, re.DOTALL | re.IGNORECASE)
+    if match:
+        xml_to_parse = match.group(0)
+    else:
+        # Fallback to the whole string if no <Agent> tag found, maybe it's implicitly there or malformed
+        xml_to_parse = xml_string
+
     # Parse the XML string
     try:
-        root = ET.fromstring(xml_string)
+        # Basic cleanup: remove markdown code block delimiters if they wrap the XML
+        xml_to_parse = re.sub(r'```[a-zA-Z]*\n?', '', xml_to_parse)
+        xml_to_parse = re.sub(r'```', '', xml_to_parse)
+        root = ET.fromstring(xml_to_parse)
     except ET.ParseError as e:
-        return {"error": str(e)}
+        # If ET fails, try a regex fallback for key fields
+        result = {
+            'Agent Name': None,
+            'Agent Description': None,
+            'Agent Query': None,
+            'Tasks': [],
+            'Tool': None,
+            'Answer': None
+        }
+        name_match = re.search(r'<Agent-Name>(.*?)</Agent-Name>', xml_string, re.DOTALL | re.IGNORECASE)
+        desc_match = re.search(r'<Agent-Description>(.*?)</Agent-Description>', xml_string, re.DOTALL | re.IGNORECASE)
+        query_match = re.search(r'<Agent-Query>(.*?)</Agent-Query>', xml_string, re.DOTALL | re.IGNORECASE)
+        answer_match = re.search(r'<Answer>(.*?)</Answer>', xml_string, re.DOTALL | re.IGNORECASE)
+        
+        if name_match: result['Agent Name'] = name_match.group(1).strip()
+        if desc_match: result['Agent Description'] = desc_match.group(1).strip()
+        if query_match: result['Agent Query'] = query_match.group(1).strip()
+        if answer_match: result['Answer'] = answer_match.group(1).strip()
+        
+        tasks_match = re.search(r'<Tasks>(.*?)</Tasks>', xml_string, re.DOTALL | re.IGNORECASE)
+        if tasks_match:
+            tasks_content = tasks_match.group(1).strip()
+            # If tasks is already a list-like string, we might need more parsing
+            # For now, let's try to find individual <task> items if they exist
+            task_items = re.findall(r'<Task>(.*?)</Task>', tasks_content, re.IGNORECASE)
+            if task_items:
+                result['Tasks'] = [t.strip() for t in task_items]
+            else:
+                # Fallback: split by lines or commas
+                result['Tasks'] = [t.strip() for t in tasks_content.split('\n') if t.strip()]
+        
+        return result
     
     # Initialize the result dictionary
     result = {

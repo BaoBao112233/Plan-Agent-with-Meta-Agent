@@ -53,7 +53,13 @@ class COTAgent(BaseAgent):
     def controller(self,state:AgentState):
         if self.max_iteration>self.iteration:
             self.iteration+=1
-            return state['agent_data']['Route'].lower()
+            route = state['agent_data'].get('Route')
+            if not route:
+                # Default to answer if no route found but we have content
+                if state['agent_data'].get('Final Answer') or state['agent_data'].get('Observation'):
+                    return 'answer' if state['agent_data'].get('Final Answer') else 'reason'
+                return 'answer' # Last resort
+            return route.lower()
         else:
             return 'answer'
 

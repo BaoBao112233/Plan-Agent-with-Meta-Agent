@@ -26,6 +26,18 @@ llm = ChatVertexAI(
 
 # agent=MetaAgent(llm=llm,tools=[web_search_tool,file_writer_tool],verbose=True)
 agent = PlanAgent(llm=llm, verbose=True)
-input_text = input("Enter a query: ")
+# input_text = input("Enter a query: ")
+input_text = """
+Tôi cần crawl data và trả về thông tin:
+
+1. Google.
+Nhập từ khóa => quét data trong danh sách kết quả trả về
+2. Facebook:
+Có 2 phần:
+Phần 1: tương tự Google, cũng sẽ quét ra data sau khi search trên FB.
+Phần 2: quét data các thành viên trong group Facebook.
+
+Các trường thông tin bao gồm: Tên, SĐT, Email, Tên công ty, Tỉnh thành
+"""
 agent_response = agent.invoke(input_text)
 print(agent_response)

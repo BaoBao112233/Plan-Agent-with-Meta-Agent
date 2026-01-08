@@ -36,3 +36,87 @@ def current_time_tool(timezone:str) -> str:
     except Exception as err:
         return f"Error: {err}"
 
+class Terminal(BaseModel):
+    command:str=Field(...,description="The shell command to be executed.",example=["ls -l","echo Hello World"])
+
+@tool("Terminal Tool",args_schema=Terminal)
+def terminal_tool(command:str)->str:
+    '''
+    Executes a shell command in the terminal and returns its output.
+    '''
+    import subprocess
+    import os
+
+    try:
+        # Execute the command, capture stdout and stderr
+        # text=True decodes stdout/stderr as text using default encoding
+        # check=True will raise CalledProcessError if the command returns a non-zero exit code
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True, encoding='utf-8')
+
+        output = f"Command executed successfully.\nStandard Output:\n{result.stdout}\nStandard Error:\n{result.stderr}"
+        return output
+    except subprocess.CalledProcessError as e:
+        # Command returned a non-zero exit code
+        error_output = f"Error executing command: '{e.cmd}'\nExit Code: {e.returncode}\nStandard Output:\n{e.stdout}\nStandard Error:\n{e.stderr}"
+        return f"Error: {error_output}"
+    except FileNotFoundError:
+        return f"Error: Command not found. Please check the command and try again."
+    except Exception as err:
+        return f"An unexpected error occurred: {err}"
+
+class Terminal(BaseModel):
+    command:str=Field(...,description="The shell command to be executed.",example=["ls -l","echo Hello World"])
+
+@tool("Terminal Tool",args_schema=Terminal)
+def terminal_tool(command:str)->str:
+    '''
+    Executes a shell command in the terminal and returns its output.
+    '''
+    import subprocess
+    import os
+
+    try:
+        # Execute the command, capture stdout and stderr
+        # text=True decodes stdout/stderr as text using default encoding
+        # check=True will raise CalledProcessError if the command returns a non-zero exit code
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True, encoding='utf-8')
+
+        output = f"Command executed successfully.\nStandard Output:\n{result.stdout}\nStandard Error:\n{result.stderr}"
+        return output
+    except subprocess.CalledProcessError as e:
+        # Command returned a non-zero exit code
+        error_output = f"Error executing command: '{e.cmd}'\nExit Code: {e.returncode}\nStandard Output:\n{e.stdout}\nStandard Error:\n{e.stderr}"
+        return f"Error: {error_output}"
+    except FileNotFoundError:
+        return f"Error: Command not found. Please check the command and try again."
+    except Exception as err:
+        return f"An unexpected error occurred: {err}"
+
+class Terminal(BaseModel):
+    command:str=Field(...,description="The shell command to be executed.",example=["ls -l","echo Hello World"])
+
+@tool("Terminal Tool",args_schema=Terminal)
+def terminal_tool(command:str)->str:
+    '''
+    Executes a shell command in the terminal and returns its output.
+    '''
+    import subprocess
+    import os
+
+    try:
+        # Execute the command, capture stdout and stderr
+        # text=True decodes stdout/stderr as text using default encoding
+        # check=True will raise CalledProcessError if the command returns a non-zero exit code
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True, encoding='utf-8')
+
+        output = f"Command executed successfully.\nStandard Output:\n{result.stdout}\nStandard Error:\n{result.stderr}"
+        return output
+    except subprocess.CalledProcessError as e:
+        # Command returned a non-zero exit code
+        error_output = f"Error executing command: '{e.cmd}'\nExit Code: {e.returncode}\nStandard Output:\n{e.stdout}\nStandard Error:\n{e.stderr}"
+        return f"Error: {error_output}"
+    except FileNotFoundError:
+        return f"Error: Command not found. Please check the command and try again."
+    except Exception as err:
+        return f"An unexpected error occurred: {err}"
+

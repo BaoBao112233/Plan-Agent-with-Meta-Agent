@@ -1,0 +1,10 @@
+Tôi cần crawl data và trả về thông tin:
+
+1. Google.
+Nhập từ khóa => quét data trong danh sách kết quả trả về
+2. Facebook:
+Có 2 phần:
+Phần 1: tương tự Google, cũng sẽ quét ra data sau khi search trên FB.
+Phần 2: quét data các thành viên trong group Facebook.
+
+Các trường thông tin bao gồm: Tên, SĐT, Email, Tên công ty, Tỉnh thành

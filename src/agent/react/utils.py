@@ -11,22 +11,26 @@ def extract_llm_response(response: str) -> dict:
         'Final Answer': None,
         'Route': None
     }
+    
+    # Clean response from code blocks if present
+    clean_response = re.sub(r'```[a-zA-Z]*\n?', '', response)
+    clean_response = re.sub(r'```', '', clean_response)
 
-    # Define regular expressions for different parts of the response
-    thought_regex = re.compile(r'<Thought>\s*(.*?)\s*</Thought>', re.DOTALL)
-    action_name_regex = re.compile(r'<Action Name>\s*(.*?)\s*</Action Name>', re.DOTALL)
-    action_input_regex = re.compile(r'<Action Input>\s*(\{.*?\})\s*</Action Input>', re.DOTALL)
-    query_regex = re.compile(r'<Query>\s*(.*?)\s*</Query>', re.DOTALL)
-    final_answer_regex = re.compile(r'<Final Answer>\s*(.*?)\s*</Final Answer>', re.DOTALL)
-    route_regex = re.compile(r'<Route>\s*(.*?)\s*</Route>', re.DOTALL)
+    # Define regular expressions for different parts of the response - more flexible and case-insensitive
+    thought_regex = re.compile(r'<Thought>\s*(.*?)\s*</Thought>', re.DOTALL | re.IGNORECASE)
+    action_name_regex = re.compile(r'<Action\s*Name>\s*(.*?)\s*</Action\s*Name>', re.DOTALL | re.IGNORECASE)
+    action_input_regex = re.compile(r'<Action\s*Input>\s*(\{.*?\})\s*</Action\s*Input>', re.DOTALL | re.IGNORECASE)
+    query_regex = re.compile(r'<Query>\s*(.*?)\s*</Query>', re.DOTALL | re.IGNORECASE)
+    final_answer_regex = re.compile(r'<Final\s*Answer>\s*(.*?)\s*</Final\s*Answer>', re.DOTALL | re.IGNORECASE)
+    route_regex = re.compile(r'<Route>\s*(.*?)\s*</Route>', re.DOTALL | re.IGNORECASE)
 
     # Extract Thought
-    thought_match = thought_regex.search(response)
+    thought_match = thought_regex.search(clean_response)
     if thought_match:
         result['Thought'] = thought_match.group(1).strip()
 
     # Extract Action Name
-    action_name_match = action_name_regex.search(response)
+    action_name_match = action_name_regex.search(clean_response)
     if action_name_match:
         result['Action Name'] = action_name_match.group(1).strip()
 
