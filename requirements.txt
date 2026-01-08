@@ -4,3 +4,8 @@ termcolor
 requests
 ipython
 python-dotenv
+google-cloud-aiplatform
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
+anthropic

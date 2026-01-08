@@ -11,3 +11,6 @@ class BaseInference(ABC):
     @abstractmethod
     def invoke(self,messages:list[dict])->AIMessage:
         pass
+
+from .vertex_ai import ChatVertexAI
+from .groq import ChatGroq
