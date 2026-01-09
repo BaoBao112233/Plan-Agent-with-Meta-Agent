@@ -11,7 +11,8 @@ from src.agent import BaseAgent
 from termcolor import colored
 
 class MetaAgent(BaseAgent):
-    def __init__(self,llm:BaseInference=None,tools:list=[],max_iteration=10,json=False,verbose=False):
+    def __init__(self,llm:BaseInference=None,tools:list=[],max_iteration=10,json=False,verbose=False,reporter=None):
+        super().__init__(reporter=reporter)
         self.name='Meta Agent'
         self.llm=llm
         self.max_iteration=max_iteration
@@ -30,10 +31,17 @@ class MetaAgent(BaseAgent):
         tasks=agent_data.get('Tasks')
         tool=agent_data.get('Tool')
         answer=agent_data.get('Answer')
+        
+        self.report(name, "agent-name")
+        self.report(description, "description")
+        self.report(tasks, "tasks")
+        self.report(tool, "tool")
+
         if not answer:
             content=f'Agent Name: {name}\nDescription: {description}\nTasks: {tasks}\nTool: {tool}'
             print_stmt=colored(content,color='yellow',attrs=['bold'])
         else:
+            self.report(answer, "answer")
             content=f'Final Answer: {answer}'
             print_stmt=colored(content,color='cyan',attrs=['bold'])
         if self.verbose:
@@ -47,7 +55,7 @@ class MetaAgent(BaseAgent):
         description=agent_data.get('Agent Description')
         instructions=agent_data.get('Tasks')
         # tool=agent_data.get('Tool')
-        agent=ReactAgent(name=name,description=description,instructions=instructions,tools=self.tools,llm=self.llm,verbose=self.verbose)
+        agent=ReactAgent(name=name,description=description,instructions=instructions,tools=self.tools,llm=self.llm,verbose=self.verbose,reporter=self._reporter)
         if self.iteration==1:
             agent_response=agent.invoke(f'Query: {query}')
         else:
@@ -61,7 +69,7 @@ class MetaAgent(BaseAgent):
         query=agent_data.get('Agent Query')
         description=agent_data.get('Agent Description')
         instructions=agent_data.get('Tasks')
-        agent=COTAgent(name=name,description=description,instructions=instructions,llm=self.llm,verbose=self.verbose)
+        agent=COTAgent(name=name,description=description,instructions=instructions,llm=self.llm,verbose=self.verbose,reporter=self._reporter)
         if self.iteration==1:
             agent_response=agent.invoke(f'Query: {query}')
         else:

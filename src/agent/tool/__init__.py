@@ -14,6 +14,7 @@ from termcolor import colored
 from subprocess import run
 import ast
 import os
+import json
 
 class ToolAgent(BaseAgent):
     def __init__(self,location:str='',llm:BaseInference=None,verbose=False,json=False):
@@ -66,12 +67,28 @@ class ToolAgent(BaseAgent):
         return {**state,'tool_data':updated_tool_data.content,'error':error}
     
     def debug_tool(self,state:AgentState):
+        # Initialize error and tool_data to avoid UnboundLocalError
+        error = state.get('error') or ''
+        tool_data = state.get('tool_data') or {}
+        
         if state.get('route') in ['debug']:
             error=state.get('input')
             tool_data=self.find_the_tool(error)
         elif state.get('route') in ['generate','update']:
             error=state.get('error')
             tool_data=state.get('tool_data')
+        
+        # Handle case where tool_data is None or not a dict
+        tool_data = state.get('tool_data') or {}
+        if isinstance(tool_data, str):
+            try:
+                tool_data = json.loads(tool_data)
+            except json.JSONDecodeError:
+                tool_data = {'tool': tool_data}
+        if not tool_data or not isinstance(tool_data, dict):
+            print(f'Error: Could not find tool data. tool_data={tool_data}')
+            return {**state, 'error': 'Tool not found or invalid tool data'}
+        
         iteration=0
         max_iteration=5
         system_prompt=read_markdown_file('./src/agent/tool/prompt/debug.md')
@@ -90,7 +107,7 @@ class ToolAgent(BaseAgent):
                 elif state.get('route') in ['generate','update']:
                     save_tool_to_module(self.location,debug_tool_data.content)
                 if self.verbose:
-                    print(f'Fixed {debug_tool_data.content.get('name')} and saved to {self.location} successfully.')
+                    print(f"Fixed {debug_tool_data.content.get('name')} and saved to {self.location} successfully.")
             except Exception as error:
                 messages.append(HumanMessage(str(error)))
                 print(f'Error: {error}')
@@ -113,8 +130,46 @@ class ToolAgent(BaseAgent):
         route=state.get('route').lower()
         module=import_module(self.location.split('.')[0])
         reload(module)
-        tool=getattr(module,state.get('tool_data')['tool_name'])
-        tool_name=state.get('tool_data')['name']
+        tool_data = state.get('tool_data') or {}
+        if isinstance(tool_data, str):
+            try:
+                tool_data = json.loads(tool_data)
+            except json.JSONDecodeError:
+                tool_data = {'tool': tool_data}
+        
+        # Extract function name from tool code using AST
+        import ast
+        func_name = None
+        try:
+            tool_code = tool_data.get('tool', '')
+            if tool_code:
+                tree = ast.parse(tool_code)
+                for node in tree.body:
+                    if isinstance(node, ast.FunctionDef):
+                        func_name = node.name
+                        break
+        except Exception as e:
+            print(f"Error parsing tool code: {e}")
+        
+        # If parsing failed or no function found, use name field as fallback
+        if not func_name:
+            # Convert tool name to valid Python identifier
+            raw_name = tool_data.get('name', '')
+            func_name = raw_name.lower().replace(' ', '_').replace('-', '_')
+            # Remove any non-alphanumeric chars except underscore
+            import re
+            func_name = re.sub(r'[^a-z0-9_]', '', func_name)
+        
+        try:
+            tool = getattr(module, func_name)
+        except AttributeError as e:
+            # If still can't find, try to list all functions in module and match
+            import inspect
+            all_funcs = [name for name, obj in inspect.getmembers(module) if inspect.isfunction(obj)]
+            print(f"Error: Function '{func_name}' not found in module. Available functions: {all_funcs}")
+            raise
+        
+        tool_name = tool_data.get('name', func_name)
         tool_args=tool.schema if tool.schema.get('properties') else {}
         if route=='update':
             output=f'Tool Name: {tool_name}\nTool Input: {tool_args}\n Tool has been updated successfully.'
@@ -226,9 +281,14 @@ class ToolAgent(BaseAgent):
         tool_data=llm_response.get('tool_data')
         route=llm_response.get('route')
         output=llm_response.get('output')
+        
+        # Handle case where tool_data might be None or missing keys
+        if not tool_data:
+            tool_data = {}
+        
         return {
             'route':route,
-            'func_name': tool_data.get('tool_name'),
+            'func_name': tool_data.get('name'),  # LLM returns 'name' not 'tool_name'
             'tool_name': tool_data.get('name'),
             'tool': tool_data.get('tool'),
             'output':output

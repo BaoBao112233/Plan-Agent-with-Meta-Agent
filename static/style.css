@@ -1,0 +1,221 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f7f6;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1rem;
+    text-align: center;
+}
+
+main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.chat-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #ddd;
+    background: white;
+}
+
+.chat-history {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.message {
+    padding: 0.8rem;
+    border-radius: 8px;
+    max-width: 80%;
+}
+
+.user-message {
+    align-self: flex-end;
+    background-color: #3498db;
+    color: white;
+}
+
+.bot-message {
+    align-self: flex-start;
+    background-color: #ecf0f1;
+    color: #333;
+}
+
+.input-area {
+    display: flex;
+    padding: 1rem;
+    border-top: 1px solid #ddd;
+}
+
+#user-input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#send-btn {
+    margin-left: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #2ecc71;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.dashboard-section {
+    flex: 1;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    overflow-y: auto;
+}
+
+.reasoning-section {
+    flex: 1;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.reasoning-log {
+    flex: 1;
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.reasoning-entry {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-left: 4px solid #3498db;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.reasoning-entry .timestamp {
+    color: #7f8c8d;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.reasoning-entry .type {
+    font-weight: bold;
+    color: #2c3e50;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+.reasoning-entry.thought {
+    border-left-color: #2ecc71;
+}
+
+.reasoning-entry.tool {
+    border-left-color: #e67e22;
+}
+
+.reasoning-entry.observation {
+    border-left-color: #3498db;
+}
+
+.reasoning-entry.answer {
+    border-left-color: #9b59b6;
+    background: #f0e6ff;
+}
+
+.reasoning-entry.agent-name {
+    border-left-color: #e74c3c;
+    background: #ffe6e6;
+}
+
+.reasoning-entry .content {
+    color: #34495e;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.status-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.status-item {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.status-item label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #2c3e50;
+}
+
+.scroll-box {
+    max-height: 150px;
+    overflow-y: auto;
+    background: #fdfdfd;
+    padding: 0.5rem;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+}
+
+#agent-name, #tool-name {
+    font-weight: bold;
+    color: #e67e22;
+}
+
+.download-btn {
+    padding: 6px 12px;
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.3s;
+    font-weight: 500;
+}
+
+.download-btn:hover {
+    background-color: #229954;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.download-btn:active {
+    background-color: #1e8449;
+}

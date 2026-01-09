@@ -10,7 +10,8 @@ from termcolor import colored
 from time import sleep
 
 class COTAgent(BaseAgent):
-    def __init__(self,name:str='',description:str='',instructions:list[str]=[],llm:BaseInference=None,max_iteration=10,json=False,verbose=False):
+    def __init__(self,name:str='',description:str='',instructions:list[str]=[],llm:BaseInference=None,max_iteration=10,json=False,verbose=False,reporter=None):
+        super().__init__(reporter=reporter)
         self.name=name
         self.description=description
         self.instructions=self.get_instructions(instructions)
@@ -25,29 +26,40 @@ class COTAgent(BaseAgent):
         return '\n'.join([f'{i+1}. {instruction}' for i,instruction in enumerate(instructions)])
 
     def reason(self,state:AgentState):
+        messages = state['messages']
         if self.max_iteration>self.iteration:
             if self.iteration%2!=0:
                 sleep(60) #To prevent from hitting the API rate limit
-            llm_response=self.llm.invoke(state['messages'])
+            llm_response=self.llm.invoke(messages)
             # print(llm_response.content)
             agent_data=extract_llm_response(llm_response.content)
+            messages = messages + [HumanMessage(llm_response.content)]
         else:
             agent_data={
                 'Thought':'I reached the iteration limit',
-                'Answer':'Iteration limit reached'
+                'Final Answer':'Iteration limit reached',
+                'Route': 'Answer'
             }
+        
         if self.verbose:
-            if agent_data.get('Observation'):
-                print(colored(f'Thought: {agent_data.get('Thought')}',color='green',attrs=['bold']))
-                print(colored(f'Observation: {agent_data.get("Observation")}',color='cyan',attrs=['bold']))
-        return {**state, 'messages':[HumanMessage(llm_response.content)],'agent_data':agent_data}
+            thought = agent_data.get('Thought')
+            if thought:
+                self.report(thought, "thought")
+                print(colored(f"Thought: {thought}",color='green',attrs=['bold']))
+            
+            observation = agent_data.get('Observation')
+            if observation:
+                self.report(observation, "observation")
+                print(colored(f"Observation: {observation}",color='cyan',attrs=['bold']))
+        
+        return {**state, 'messages': messages, 'agent_data': agent_data}
     
     def reflection(self,state:AgentState):
         agent_data=state['agent_data']
         if self.verbose:
             if agent_data.get('Reflection'):
-                print(colored(f'Thought: {agent_data.get('Thought')}',color='green',attrs=['bold']))
-                print(colored(f'Reflection: {agent_data.get("Reflection")}',color='magenta',attrs=['bold']))
+                print(colored(f"Thought: {agent_data.get('Thought')}",color='green',attrs=['bold']))
+                print(colored(f"Reflection: {agent_data.get('Reflection')}",color='magenta',attrs=['bold']))
         return {**state, 'agent_data':agent_data}
 
     def controller(self,state:AgentState):
@@ -67,8 +79,11 @@ class COTAgent(BaseAgent):
         agent_data=state['agent_data']
         if self.verbose:
             if state['agent_data']['Final Answer']:
-                print(colored(f'Thought: {agent_data.get('Thought')}',color='green',attrs=['bold']))
-                print(colored(f'Answer: {agent_data.get("Final Answer")}',color='blue',attrs=['bold']))
+                answer = agent_data.get("Final Answer")
+                self.report(answer, "answer")
+                thought = agent_data.get('Thought')
+                print(colored(f"Thought: {thought}",color='green',attrs=['bold']))
+                print(colored(f"Answer: {answer}",color='blue',attrs=['bold']))
         return {**state, 'output':agent_data.get("Final Answer")}
     
     def create_graph(self):

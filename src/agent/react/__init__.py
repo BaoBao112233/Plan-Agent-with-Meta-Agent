@@ -17,7 +17,8 @@ from os import getcwd
 import json
 
 class ReactAgent(BaseAgent):
-    def __init__(self,name:str='',description:str='',instructions:list[str]=[],tools:list=[],llm:BaseInference=None,max_iterations=10,dynamic_tools_file:str='experimental.py',json=False,verbose=False):
+    def __init__(self,name:str='',description:str='',instructions:list[str]=[],tools:list=[],llm:BaseInference=None,max_iterations=10,dynamic_tools_file:str='experimental.py',json=False,verbose=False,reporter=None):
+        super().__init__(reporter=reporter)
         self.name=name
         self.description=description
         self.instructions=self.get_instructions(instructions)
@@ -42,6 +43,7 @@ class ReactAgent(BaseAgent):
         # print(message.content)
         thought=response.get('Thought')
         if self.verbose:
+            self.report(thought, "thought")
             print(colored(f'Thought: {thought}',color='green',attrs=['bold']))
         return {**state,'messages':[message]}
 
@@ -85,6 +87,8 @@ class ReactAgent(BaseAgent):
         action_input=response.get('Action Input')
         route=response.get('Route')
         if self.verbose:
+            self.report(action_name, "tool")
+            self.report(action_input, "action_input")
             print(colored(f'Action Name: {action_name}',color='cyan',attrs=['bold']))
             print(colored(f'Action Input: {json.dumps(action_input,indent=2)}',color='cyan',attrs=['bold']))
         if action_name not in self.tool_names:
@@ -96,6 +100,7 @@ class ReactAgent(BaseAgent):
             except Exception as e:
                 observation=str(e)
         if self.verbose:
+            self.report(observation, "observation")
             print(colored(f'Observation: {observation}',color='magenta',attrs=['bold']))
         state['messages'].pop()
         messages=[
@@ -118,10 +123,14 @@ class ReactAgent(BaseAgent):
             self.remove_tool_from_toolbox(tool_name)
             content=f'{output} Now the tool is removed from the tool box.'        
         else:
+            tool = None
             try:
                 tool=getattr(self.dynamic_tools_module,func_name)
             except Exception as e:
-                print(e)
+                print(f'Error loading tool {func_name}: {e}')
+                content=f'Error: Could not load tool "{func_name}". {str(e)}'
+                return {**state,'messages':[HumanMessage(content)]}
+            
             if route=='generate':
                 self.add_tools_to_toolbox([tool])
             if route=='update':
@@ -150,7 +159,12 @@ class ReactAgent(BaseAgent):
             self.iteration+=1
             message=(state['messages'][-1])
             response=extract_llm_response(message.content)
-            return response.get('Route').lower()
+            route = response.get('Route') if response else None
+            if route:
+                return route.lower()
+            else:
+                print(f"Warning: No Route found in response. Defaulting to 'final'. Response: {response}")
+                return 'final'
         else:
             return 'final'
 
@@ -180,11 +194,12 @@ class ReactAgent(BaseAgent):
     def invoke(self,input:str)->str:
         if self.verbose:
             print(f'Entering '+colored(self.name,'black','on_white'))
+        tools_str = ',\n'.join(self.tools_description)
         parameters={
             'name':self.name,
             'description':self.description,
             'instructions':self.instructions,
-            'tools':f'[{',\n'.join(self.tools_description)}]',
+            'tools':f'[{tools_str}]',
             'tool_names':self.tool_names
         }
         system_prompt=self.system_prompt.format(**parameters)
@@ -200,11 +215,12 @@ class ReactAgent(BaseAgent):
     def stream(self, input: str):
         if self.verbose:
             print(f'Entering {self.name}')
+        tools_str = ',\n'.join(self.tools_description)
         parameters={
             'name':self.name,
             'description':self.description,
             'instructions':self.instructions,
-            'tools':f'[{',\n'.join(self.tools_description)}]',
+            'tools':f'[{tools_str}]',
             'tool_names':self.tool_names
         }
         system_prompt=self.system_prompt.format(**parameters)

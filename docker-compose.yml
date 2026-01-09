@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - ./service-account.json:/app/service-account.json
+    restart: always
+
+# Ensure you have a .env file with the following variables:
+# GOOGLE_CLOUD_PROJECT=your-project-id
+# VERTEX_AI_LOCATION=us-central1
+# VERTEX_AI_MODEL=gemini-1.5-flash
+# GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json

@@ -11,13 +11,15 @@ from src.agent import BaseAgent
 from termcolor import colored
 
 class PlanAgent(BaseAgent):
-    def __init__(self,max_iteration=10,llm:BaseInference=None,verbose=False):
+    def __init__(self,max_iteration=10,llm:BaseInference=None,verbose=False,reporter=None,interactive_agent=None):
+        super().__init__(reporter=reporter)
         self.name='Plan Agent'
         self.max_iteration=max_iteration
         self.graph=self.create_graph()
         self.verbose=verbose
         self.iteration=0
         self.llm=llm
+        self.interactive_agent=interactive_agent
     
     def router(self,state:PlanState):
         routes=[
@@ -47,7 +49,9 @@ class PlanAgent(BaseAgent):
             
         plan=plan_data.get('Plan')
         if self.verbose:
-            print(colored(f'Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])}',color='green',attrs=['bold']))
+            self.report(plan, "tasks")
+            plan_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])
+            print(colored(f"Plan:\n{plan_str}",color='green',attrs=['bold']))
         return {**state,'plan':plan}
     
     def advance_plan(self,state:PlanState):
@@ -68,7 +72,19 @@ class PlanAgent(BaseAgent):
         while route!='Plan':
             question=plan_data.get('Question')
             messages.pop(-1)
-            answer=input(f'{question}\nUser: ')
+            
+            # Check if we have interactive_agent (UI mode) or fallback to simple mode
+            if self.interactive_agent:
+                # Ask user through UI (blocking call)
+                answer = self.interactive_agent.ask_user(question)
+            else:
+                # Non-interactive mode: use default answer
+                if self.verbose:
+                    print(colored(f"Question from Agent: {question}", color="yellow"))
+                    print(colored("Using default answer in non-interactive mode.", color="yellow"))
+                answer="Skip to simple plan"
+                route='Plan'  # Force to Plan route
+            
             user_prompt=f'<option>\n<question>{question}</question>\n<answer>{answer}</answer>\n<route>{route}</route>\n</option>'
             messages.append(HumanMessage(user_prompt))
             llm_response=self.llm.invoke(messages)
@@ -83,7 +99,9 @@ class PlanAgent(BaseAgent):
             
         plan=plan_data.get('Plan') if plan_data else []
         if self.verbose and plan:
-            print(colored(f'Plan:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])}',color='green',attrs=['bold']))
+            self.report(plan, "tasks")
+            plan_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(plan)])
+            print(colored(f"Plan:\n{plan_str}",color='green',attrs=['bold']))
         return {**state,'plan':plan}
 
 
@@ -93,8 +111,12 @@ class PlanAgent(BaseAgent):
         pending=state.get('plan')
         completed=[]
         if self.verbose:
-            print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
-            print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+            self.report(pending, "tasks")
+            # self.report(completed, "completed_tasks") # I don't have a UI box for this yet but tasks box shows the list
+            pending_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])
+            completed_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])
+            print(colored(f"Pending Tasks:\n{pending_str}",color='yellow',attrs=['bold']))
+            print(colored(f"Completed Tasks:\n{completed_str}",color='blue',attrs=['bold']))
         messages=[SystemMessage(system_prompt)]
         return {**state,'messages':messages,'current':current,'pending':pending,'completed':completed,'output':''}
     
@@ -102,8 +124,9 @@ class PlanAgent(BaseAgent):
         plan=state.get('plan')
         current=state.get('current')
         responses=state.get('responses')
-        agent=MetaAgent(llm=self.llm,verbose=self.verbose)
-        task_response=agent.invoke(f'Information:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(responses)])}\nTask:\n{current}')
+        agent=MetaAgent(llm=self.llm,verbose=self.verbose,reporter=self._reporter)
+        info_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(responses)])
+        task_response=agent.invoke(f"Information:\n{info_str}\nTask:\n{current}")
         if self.verbose:
             print(colored(f'Current Task:\n{current}',color='cyan',attrs=['bold']))
             print(colored(f'Task Response:\n{task_response}',color='cyan',attrs=['bold']))
@@ -120,9 +143,11 @@ class PlanAgent(BaseAgent):
         
         if self.verbose:
             if pending:
-                print(colored(f'Pending Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])}',color='yellow',attrs=['bold']))
+                pending_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(pending)])
+                print(colored(f"Pending Tasks:\n{pending_str}",color='yellow',attrs=['bold']))
             if completed:
-                print(colored(f'Completed Tasks:\n{'\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])}',color='blue',attrs=['bold']))
+                completed_str = '\n'.join([f'{index+1}. {task}' for index,task in enumerate(completed)])
+                print(colored(f"Completed Tasks:\n{completed_str}",color='blue',attrs=['bold']))
         
         current = pending[0] if pending else ''
         
